@@ -5,19 +5,22 @@ import (
 	"math/rand"
 )
 
-type node struct {
+type Node struct {
 	id   UUID
 	op   func() error
-	prev []*node
-	next []*node
+	prev []*Node
+	next []*Node
 }
 
-func newNode(op func() error, prev []*node) *node {
-	n := &node{
+func NewNode(op func() error, prev []*Node) *Node {
+	if prev == nil {
+		prev = make([]*Node, 0)
+	}
+	n := &Node{
 		id:   New(),
 		op:   op,
 		prev: prev,
-		next: make([]*node, len(prev)),
+		next: make([]*Node, 0),
 	}
 	for _, p := range prev {
 		p.addNext(n)
@@ -25,13 +28,13 @@ func newNode(op func() error, prev []*node) *node {
 	return n
 }
 
-func (n *node) addNext(nxt *node) {
+func (n *Node) addNext(nxt *Node) {
 	n.next = append(n.next, nxt)
 }
 
-func (n *node) runHashgraph(seed int) {
+func (n *Node) RunHashgraph(seed int) {
 	r := rand.New(rand.NewSource(int64(seed)))
-	readyToRun := make([]*node, 0)
+	readyToRun := make([]*Node, 0)
 	readyToRun = append(readyToRun, n)
 	for len(readyToRun) > 0 {
 		curr := readyToRun[0]
@@ -39,11 +42,11 @@ func (n *node) runHashgraph(seed int) {
 		if err != nil {
 			panic(err)
 		}
-		nxt := make([]*node, len(curr.next))
+		nxt := make([]*Node, 0, len(curr.next))
 		for _, nxtNode := range curr.next {
 			nxt = append(nxt, nxtNode)
 		}
 		r.Shuffle(len(nxt), func(i, j int) { nxt[i], nxt[j] = nxt[j], nxt[i] })
-		readyToRun = append(readyToRun, nxt...)
+		readyToRun = append(readyToRun[1:], nxt...)
 	}
 }
