@@ -2,25 +2,32 @@ package hashgraph
 
 import (
 	. "github.com/google/uuid"
+	"github.com/samber/lo"
 	"math/rand"
 )
 
 type Node struct {
-	id   UUID
-	op   func() error
-	prev []*Node
-	next []*Node
+	id    UUID
+	depth int
+	op    func() error
+	prev  []*Node
+	next  []*Node
 }
 
 func NewNode(op func() error, prev []*Node) *Node {
+	var depth int
 	if prev == nil {
 		prev = make([]*Node, 0)
+		depth = 0
+	} else {
+		depth = 1 + lo.Max(lo.Map(prev, func(p *Node, _ int) int { return p.depth }))
 	}
 	n := &Node{
-		id:   New(),
-		op:   op,
-		prev: prev,
-		next: make([]*Node, 0),
+		id:    New(),
+		depth: depth,
+		op:    op,
+		prev:  prev,
+		next:  make([]*Node, 0),
 	}
 	for _, p := range prev {
 		p.addNext(n)
