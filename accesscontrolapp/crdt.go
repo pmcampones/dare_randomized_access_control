@@ -221,3 +221,13 @@ func (crdt CRDT) computeRemIdx(depth int, issuer UUID, removed UUID) (int64, err
 	idx += order
 	return idx, nil
 }
+
+func (crdt CRDT) GetOperationList() []*Op {
+	result := make([]*Op, 0, crdt.tree.Len())
+	smallestOp := &Op{idx: -1}
+	crdt.tree.AscendGreaterOrEqual(smallestOp, func(i llrb.Item) bool {
+		result = append(result, i.(*Op))
+		return true
+	})
+	return result
+}
