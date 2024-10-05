@@ -8,7 +8,7 @@ import (
 func TestShouldMakeNode(t *testing.T) {
 	send := 'A'
 	received := make([]int32, 0)
-	n := NewNode(func() error {
+	n := NewNode(func(_ int) error {
 		received = append(received, send)
 		return nil
 	}, nil)
@@ -25,13 +25,13 @@ func TestShouldRunSequential(t *testing.T) {
 	}
 	received := make([]int32, 0, numNodes)
 	nodes := make([]*Node, 0, numNodes)
-	nodes = append(nodes, NewNode(func() error {
+	nodes = append(nodes, NewNode(func(_ int) error {
 		received = append(received, 0)
 		return nil
 	}, nil))
 	for i := 1; i < numNodes; i++ {
 		prev := []*Node{nodes[i-1]}
-		nodes = append(nodes, NewNode(func() error {
+		nodes = append(nodes, NewNode(func(_ int) error {
 			received = append(received, int32(i))
 			return nil
 		}, prev))
@@ -47,9 +47,9 @@ func TestShouldRunSequential(t *testing.T) {
 func TestShouldRunConcurrent(t *testing.T) {
 	numNodes := 1000
 	received := make(map[int32]bool)
-	firstNode := NewNode(func() error { return nil }, nil)
+	firstNode := NewNode(func(_ int) error { return nil }, nil)
 	for i := 0; i < numNodes; i++ {
-		NewNode(func() error {
+		NewNode(func(_ int) error {
 			received[int32(i)] = true
 			return nil
 		}, []*Node{firstNode})
@@ -66,9 +66,9 @@ func TestShouldProduceSameOrder(t *testing.T) {
 	order1 := make([]int32, 0, numNodes)
 	order2 := make([]int32, 0, numNodes)
 	ch := make(chan int32)
-	firstNode := NewNode(func() error { return nil }, nil)
+	firstNode := NewNode(func(_ int) error { return nil }, nil)
 	for i := 0; i < numNodes; i++ {
-		NewNode(func() error {
+		NewNode(func(_ int) error {
 			ch <- int32(i)
 			return nil
 		}, []*Node{firstNode})
@@ -91,9 +91,9 @@ func TestShouldProduceDifferentOrder(t *testing.T) {
 	order1 := make([]int32, 0, numNodes)
 	order2 := make([]int32, 0, numNodes)
 	ch := make(chan int32)
-	firstNode := NewNode(func() error { return nil }, nil)
+	firstNode := NewNode(func(_ int) error { return nil }, nil)
 	for i := 0; i < numNodes; i++ {
-		NewNode(func() error {
+		NewNode(func(_ int) error {
 			ch <- int32(i)
 			return nil
 		}, []*Node{firstNode})
@@ -109,4 +109,27 @@ func TestShouldProduceDifferentOrder(t *testing.T) {
 	assert.Equal(t, numNodes, len(order1))
 	assert.Equal(t, numNodes, len(order2))
 	assert.NotEqual(t, order1, order2)
+}
+
+func TestShouldNotExecuteTwice(t *testing.T) {
+	vals := []byte{'A', 'B', 'C', 'D'}
+	executed := make([]byte, 0)
+	firstNode := NewNode(func(_ int) error {
+		executed = append(executed, vals[0])
+		return nil
+	}, nil)
+	upNode := NewNode(func(_ int) error {
+		executed = append(executed, vals[1])
+		return nil
+	}, []*Node{firstNode})
+	downNode := NewNode(func(_ int) error {
+		executed = append(executed, vals[2])
+		return nil
+	}, []*Node{firstNode})
+	NewNode(func(_ int) error {
+		executed = append(executed, vals[3])
+		return nil
+	}, []*Node{upNode, downNode})
+	firstNode.RunHashgraph(0)
+	assert.Equal(t, len(vals), len(executed))
 }
