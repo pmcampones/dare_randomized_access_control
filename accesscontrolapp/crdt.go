@@ -8,7 +8,7 @@ import (
 	"unsafe"
 )
 
-const u32Size = int(unsafe.Sizeof(uint32(0)))
+const u32Bits = int(unsafe.Sizeof(uint32(0))) * 8
 const opOffsetSize = 2
 
 type OpType byte
@@ -115,8 +115,8 @@ func (crdt CRDT) Post(poster UUID, msg string) func(depth int) error {
 
 func (crdt CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, error) {
 	var idx int64
-	idx = int64(depth*2 ^ (u32Size + opOffsetSize))
-	idx += int64(int(PostOffset)*2 ^ u32Size)
+	idx = int64(depth << (u32Bits + opOffsetSize))
+	idx += int64(int(PostOffset) << u32Bits)
 	idBytes, err := poster.MarshalBinary()
 	if err != nil {
 		return 0, fmt.Errorf("unable to marshal id of the message poster: %v", err)
@@ -153,8 +153,8 @@ func (crdt CRDT) Add(issuer, added UUID, points uint32) func(depth int) error {
 
 func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID) (int64, error) {
 	var idx int64
-	idx = int64(depth*2 ^ (u32Size + opOffsetSize))
-	idx += int64(int(AddOffset)*2 ^ u32Size)
+	idx = int64(depth << (u32Bits + opOffsetSize))
+	idx += int64(int(AddOffset) << u32Bits)
 	issuerBytes, err := issuer.MarshalBinary()
 	if err != nil {
 		return 0, fmt.Errorf("unable to marshal issuer: %v", err)
@@ -193,8 +193,8 @@ func (crdt CRDT) Rem(issuer, removed UUID) func(depth int) error {
 
 func (crdt CRDT) computeRemIdx(depth int, issuer UUID, removed UUID) (int64, error) {
 	var idx int64
-	idx = int64(depth*2 ^ (u32Size + opOffsetSize))
-	idx += int64(int(RemOffset)*2 ^ u32Size)
+	idx = int64(depth << (u32Bits + opOffsetSize))
+	idx += int64(int(RemOffset) << u32Bits)
 	issuerBytes, err := issuer.MarshalBinary()
 	if err != nil {
 		return 0, fmt.Errorf("unable to marshal issuer: %v", err)
