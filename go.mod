@@ -4,6 +4,7 @@ go 1.23.1
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/negrel/assert v0.2.0
 	github.com/petar/GoLLRB v0.0.0-20210522233825-ae3b015fd3e9
 	github.com/samber/lo v1.47.0
 	github.com/stretchr/testify v1.9.0
