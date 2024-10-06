@@ -1,8 +1,13 @@
 package accesscontrolapp
 
 import (
+	"crypto/sha256"
+	_ "crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/negrel/assert"
+	"unsafe"
 )
 
 type Msg struct {
@@ -22,28 +27,43 @@ type App struct {
 
 func ExecuteCRDT(crdt *CRDT) (*App, error) {
 	app := NewApp()
-	for _, op := range crdt.GetOperationList() {
+	opList := crdt.GetOperationList()
+	i := 0
+	for i < len(opList) {
+		op := opList[i]
 		switch op.kind {
 		case Init:
 			err := execInit(op, app)
 			if err != nil {
 				return app, err
 			}
+			i++
 		case Add:
 			err := execAdd(op, app)
 			if err != nil {
 				return app, err
 			}
+			i++
 		case Rem:
-			err := execRem(op, app)
-			if err != nil {
-				return app, err
+			if isConcurrent(opList, i) {
+				err := execConcurrent(op, opList[i+1], op.idx, app)
+				if err != nil {
+					return app, err
+				}
+				i += 2
+			} else {
+				err := execRem(op, app)
+				if err != nil {
+					return app, err
+				}
+				i++
 			}
 		case Post:
 			err := execPost(op, app)
 			if err != nil {
 				return app, err
 			}
+			i++
 		default:
 			return app, fmt.Errorf("unhandled operation type")
 		}
@@ -51,11 +71,31 @@ func ExecuteCRDT(crdt *CRDT) (*App, error) {
 	return app, nil
 }
 
+func isConcurrent(opList []*Op, i int) bool {
+	assert.Equal(Rem, opList[i].kind, "First operation must be removal when this method is called")
+	if (i+1) >= len(opList) || opList[i+1].kind != Rem {
+		return false
+	}
+	rem1 := opList[i].content.(*RemOp)
+	rem2 := opList[i+1].content.(*RemOp)
+	return rem1.issuer == rem2.removed && rem1.removed == rem2.issuer
+}
+
 func execPost(op *Op, app *App) error {
 	postOp := op.content.(*PostOp)
 	err := app.Post(postOp)
 	if err != nil {
 		return fmt.Errorf("unable to compute post operation: %v", err)
+	}
+	return nil
+}
+
+func execConcurrent(op1, op2 *Op, seed int64, app *App) error {
+	rem1 := op1.content.(*RemOp)
+	rem2 := op2.content.(*RemOp)
+	err := app.ConcurrentRemoval(rem1, rem2, seed)
+	if err != nil {
+		return fmt.Errorf("unable to compute concurrent removal operation: %v", err)
 	}
 	return nil
 }
@@ -128,6 +168,17 @@ func (app *App) AddUser(op *AddOp) error {
 	}
 	app.users[op.added] = added
 	return nil
+}
+
+func (app *App) ConcurrentRemoval(rem1, rem2 *RemOp, seed int64) error {
+	seedBytes := make([]byte, unsafe.Sizeof(seed))
+	binary.LittleEndian.PutUint64(seedBytes, uint64(seed))
+	hash := sha256.Sum256(seedBytes)
+	if hash[0]%2 == 1 {
+		return app.RemUser(rem1)
+	} else {
+		return app.RemUser(rem2)
+	}
 }
 
 func (app *App) RemUser(op *RemOp) error {

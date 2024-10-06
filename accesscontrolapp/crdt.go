@@ -18,7 +18,6 @@ const (
 	Post
 	Add
 	Rem
-	ConflictResolution
 )
 
 type OpOffset int
