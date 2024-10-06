@@ -267,3 +267,46 @@ func TestShouldPostConcurrently(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, len(ids), len(app.msgs))
 }
+
+func TestShouldRemoveNonConflictingConcurrently(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	points := uint32(1000)
+	ids := genIds(int(points-1), r)
+	ids2 := make([]uuid.UUID, 0, len(ids))
+	firstNode := hashgraph.NewNode(crdt.Init(firstId, points*2), nil)
+	for _, id := range ids {
+		addId := hashgraph.NewNode(crdt.Add(firstId, id, 2), []*hashgraph.Node{firstNode})
+		id2, err := uuid.NewRandomFromReader(r)
+		assert.NoError(t, err)
+		ids2 = append(ids2, id2)
+		addId2 := hashgraph.NewNode(crdt.Add(id, id2, 1), []*hashgraph.Node{addId})
+		hashgraph.NewNode(crdt.Rem(id2, id), []*hashgraph.Node{addId2})
+	}
+	firstNode.RunHashgraph(0)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, int(points), len(app.users))
+	assert.True(t, lo.NoneBy(ids, func(id uuid.UUID) bool { return app.users[id] != nil }))
+	assert.True(t, lo.EveryBy(ids2, func(id uuid.UUID) bool { return app.users[id] != nil }))
+}
+
+func TestShouldRemoveConflictingConcurrently(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	points := uint32(1000)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	firstNode := hashgraph.NewNode(crdt.Init(firstId, points), nil)
+	addNode := hashgraph.NewNode(crdt.Add(firstId, secondId, 1), []*hashgraph.Node{firstNode})
+	hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.Node{addNode})
+	hashgraph.NewNode(crdt.Rem(firstId, secondId), []*hashgraph.Node{addNode})
+	firstNode.RunHashgraph(0)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
+}
