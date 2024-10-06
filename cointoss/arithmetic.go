@@ -1,4 +1,4 @@
-package coinTosser
+package cointoss
 
 import (
 	"github.com/cloudflare/circl/group"

@@ -1,4 +1,4 @@
-package coinTosser
+package cointoss
 
 import (
 	"crypto"
@@ -85,7 +85,7 @@ func TestDLEquivalenceManyShares(t *testing.T) {
 	prover := dleq.Prover{Params: params}
 	verifier := dleq.Verifier{Params: params}
 	secret := g.NewScalar().SetUint64(1234567890)
-	commitBase := g.HashToElement([]byte("commit"), []byte("point"))
+	commitBase := g.HashToElement([]byte("commit"), []byte("Point"))
 	randomBase := g.HashToElement([]byte("randomBase"), []byte("1"))
 	shares := ShareSecret(threshold, nodes, secret)
 	rnd := g.HashToScalar([]byte("randomVal"), []byte("1"))
@@ -102,7 +102,7 @@ func TestDLEquivalenceManyShares(t *testing.T) {
 
 func TestHashPointToDouble(t *testing.T) {
 	g := group.Ristretto255
-	point := g.HashToElement([]byte("base"), []byte("point"))
+	point := g.HashToElement([]byte("base"), []byte("Point"))
 	val, err := HashPointToDouble(point)
 	assert.NoError(t, err)
 	assert.True(t, val >= 0 && val <= 1)

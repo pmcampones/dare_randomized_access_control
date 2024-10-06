@@ -3,10 +3,14 @@ package accesscontrolapp
 import (
 	"crypto/sha256"
 	_ "crypto/sha256"
+	"dare_randomized_access_control/cointoss"
 	"encoding/binary"
 	"fmt"
+	"github.com/cloudflare/circl/group"
+	"github.com/cloudflare/circl/secretsharing"
 	"github.com/google/uuid"
 	"github.com/negrel/assert"
+	"math/rand"
 	"unsafe"
 )
 
@@ -21,8 +25,9 @@ type User struct {
 }
 
 type App struct {
-	users map[uuid.UUID]*User
-	msgs  []Msg
+	secret secretsharing.Share
+	users  map[uuid.UUID]*User
+	msgs   []Msg
 }
 
 func ExecuteCRDT(crdt *CRDT) (*App, error) {
@@ -128,9 +133,15 @@ func execAdd(op *Op, app *App) error {
 }
 
 func NewApp() *App {
+	r := rand.New(rand.NewSource(int64(0)))
+	share := secretsharing.Share{
+		ID:    group.Ristretto255.NewScalar(),
+		Value: group.Ristretto255.RandomScalar(r),
+	}
 	return &App{
-		users: make(map[uuid.UUID]*User),
-		msgs:  make([]Msg, 0),
+		secret: share,
+		users:  make(map[uuid.UUID]*User),
+		msgs:   make([]Msg, 0),
 	}
 }
 
@@ -171,30 +182,68 @@ func (app *App) AddUser(op *AddOp) error {
 }
 
 func (app *App) ConcurrentRemoval(rem1, rem2 *RemOp, seed int64) error {
-	seedBytes := make([]byte, unsafe.Sizeof(seed))
-	binary.LittleEndian.PutUint64(seedBytes, uint64(seed))
-	hash := sha256.Sum256(seedBytes)
-	if hash[0]%2 == 1 {
+	canRem, reason := app.canRemUser(rem1)
+	if !canRem {
+		return fmt.Errorf(reason)
+	}
+	coin, err := computeCoinToss(seed, app.secret)
+	if err != nil {
+		return fmt.Errorf("unable to compute coin toss: %v", err)
+	}
+	threshold := app.computeThreshold(rem1)
+	if coin < threshold {
 		return app.RemUser(rem1)
 	} else {
 		return app.RemUser(rem2)
 	}
 }
 
+func (app *App) computeThreshold(rem1 *RemOp) float64 {
+	issuer := app.users[rem1.issuer]
+	removed := app.users[rem1.removed]
+	issuerPoints := issuer.Points
+	totalPoints := issuerPoints + removed.Points
+	threshold := float64(issuerPoints) / float64(totalPoints)
+	return threshold
+}
+
+func computeCoinToss(seed int64, secret secretsharing.Share) (float64, error) {
+	seedBytes := make([]byte, unsafe.Sizeof(seed))
+	binary.LittleEndian.PutUint64(seedBytes, uint64(seed))
+	hash := sha256.Sum256(seedBytes)
+	base := group.Ristretto255.HashToElement(hash[:], []byte("concurrent_rem_base"))
+	point := cointoss.ShareToPoint(secret, base)
+	coin, err := cointoss.HashPointToDouble(point.Point)
+	if err != nil {
+		return 0, fmt.Errorf("unable to hash secret point to number: %v", err)
+	}
+	return coin, nil
+}
+
 func (app *App) RemUser(op *RemOp) error {
+	canRem, reason := app.canRemUser(op)
+	if !canRem {
+		return fmt.Errorf(reason)
+	}
+	issuer := app.users[op.issuer]
+	removed := app.users[op.removed]
+	issuer.Points += removed.Points
+	delete(app.users, op.removed)
+	return nil
+}
+
+func (app *App) canRemUser(op *RemOp) (bool, string) {
 	if op.issuer == op.removed {
-		return fmt.Errorf("user cannot remove themselves")
+		return false, "user cannot remove themselves"
 	}
 	issuer := app.users[op.issuer]
 	removed := app.users[op.removed]
 	if issuer == nil {
-		return fmt.Errorf("operation issuer is not a user")
+		return false, "operation issuer is not a user"
 	} else if removed == nil {
-		return fmt.Errorf("removed user is not in the system")
+		return false, "removed user is not in the system"
 	}
-	issuer.Points += removed.Points
-	delete(app.users, op.removed)
-	return nil
+	return true, ""
 }
 
 func (app *App) Post(op *PostOp) error {

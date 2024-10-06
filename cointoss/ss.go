@@ -1,4 +1,4 @@
-package coinTosser
+package cointoss
 
 import (
 	"crypto/rand"
@@ -16,7 +16,7 @@ import (
 // This is used in the coin tossing scheme to hide the secret while making it usable as a randomness source.
 type PointShare struct {
 	id    group.Scalar
-	point group.Element
+	Point group.Element
 }
 
 func ShareSecret(threshold uint, nodes uint, secret group.Scalar) []secretsharing.Share {
@@ -31,7 +31,7 @@ func RecoverSecret(threshold uint, shares []secretsharing.Share) (group.Scalar, 
 func ShareToPoint(share secretsharing.Share, base group.Element) PointShare {
 	return PointShare{
 		id:    share.ID,
-		point: mulPoint(base, share.Value),
+		Point: mulPoint(base, share.Value),
 	}
 }
 
@@ -39,7 +39,7 @@ func RecoverSecretFromPoints(shares []PointShare) group.Element {
 	indices := lo.Map(shares, func(share PointShare, _ int) group.Scalar { return share.id })
 	coefficients := lo.Map(indices, func(i group.Scalar, _ int) group.Scalar { return lagrangeCoefficient(i, indices) })
 	terms := lo.ZipBy2(shares, coefficients, func(share PointShare, coeff group.Scalar) group.Element {
-		return mulPoint(share.point, coeff)
+		return mulPoint(share.Point, coeff)
 	})
 	return lo.Reduce(terms[1:], func(acc group.Element, term group.Element, _ int) group.Element {
 		return addPoint(acc, term)
@@ -60,7 +60,7 @@ func lagrangeCoefficient(i group.Scalar, indices []group.Scalar) group.Scalar {
 func HashPointToDouble(point group.Element) (float64, error) {
 	pointMarshal, err := point.MarshalBinary()
 	if err != nil {
-		return -1, fmt.Errorf("unable to generate bytes from point: %v", err)
+		return -1, fmt.Errorf("unable to generate bytes from Point: %v", err)
 	}
 	hashed := sha256.Sum256(pointMarshal)
 	val := binary.LittleEndian.Uint64(hashed[:unsafe.Sizeof(uint64(0))])
