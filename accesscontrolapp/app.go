@@ -20,42 +20,42 @@ type App struct {
 	msgs  []Msg
 }
 
-func ExecuteCRDT(crdt *CRDT) error {
+func ExecuteCRDT(crdt *CRDT) (*App, error) {
 	app := NewApp()
 	for _, op := range crdt.GetOperationList() {
 		switch op.kind {
 		case Init:
 			err := execInit(op, app)
 			if err != nil {
-				return err
+				return app, err
 			}
 		case Add:
 			err := execAdd(op, app)
 			if err != nil {
-				return err
+				return app, err
 			}
 		case Rem:
 			err := execRem(op, app)
 			if err != nil {
-				return err
+				return app, err
 			}
 		case Post:
 			err := execPost(op, app)
 			if err != nil {
-				return err
+				return app, err
 			}
 		default:
-			return fmt.Errorf("unhandled operation type")
+			return app, fmt.Errorf("unhandled operation type")
 		}
 	}
-	return nil
+	return app, nil
 }
 
 func execPost(op *Op, app *App) error {
 	postOp := op.content.(*PostOp)
 	err := app.Post(postOp)
 	if err != nil {
-		return fmt.Errorf("unable to compute post operation: %v")
+		return fmt.Errorf("unable to compute post operation: %v", err)
 	}
 	return nil
 }
@@ -107,11 +107,19 @@ func (app *App) Init(op *InitOp) error {
 }
 
 func (app *App) AddUser(op *AddOp) error {
+	if op.issuer == op.added {
+		return fmt.Errorf("user cannot add themselves")
+	} else if op.points == 0 {
+		return fmt.Errorf("at least a single point must be given")
+	}
 	issuer := app.users[op.issuer]
 	if issuer == nil {
 		return fmt.Errorf("operation issuer is not a user")
-	} else if issuer.Points < op.points {
+	} else if issuer.Points <= op.points {
 		return fmt.Errorf("issuer cannot give more points than what they have")
+	}
+	if app.users[op.added] != nil {
+		return fmt.Errorf("added user already exists")
 	}
 	issuer.Points -= op.points
 	added := &User{
@@ -123,6 +131,9 @@ func (app *App) AddUser(op *AddOp) error {
 }
 
 func (app *App) RemUser(op *RemOp) error {
+	if op.issuer == op.removed {
+		return fmt.Errorf("user cannot remove themselves")
+	}
 	issuer := app.users[op.issuer]
 	removed := app.users[op.removed]
 	if issuer == nil {
@@ -130,7 +141,8 @@ func (app *App) RemUser(op *RemOp) error {
 	} else if removed == nil {
 		return fmt.Errorf("removed user is not in the system")
 	}
-	app.users[op.removed] = nil
+	issuer.Points += removed.Points
+	delete(app.users, op.removed)
 	return nil
 }
 
