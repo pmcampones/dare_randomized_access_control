@@ -3,10 +3,13 @@ package coinTosser
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"github.com/cloudflare/circl/group"
 	"github.com/cloudflare/circl/secretsharing"
 	"github.com/samber/lo"
+	"math"
+	"unsafe"
 )
 
 // PointShare is a secret share hidden in a group operation.
@@ -54,14 +57,12 @@ func lagrangeCoefficient(i group.Scalar, indices []group.Scalar) group.Scalar {
 	return mulScalar(numerators, inv(denominators))
 }
 
-// HashPointToBool hashes a point to a boolean value
-// Not sure if this is secure and unbiased.
-func HashPointToBool(point group.Element) (bool, error) {
+func HashPointToDouble(point group.Element) (float64, error) {
 	pointMarshal, err := point.MarshalBinary()
 	if err != nil {
-		return false, fmt.Errorf("unable to generate bytes from point: %v", err)
+		return -1, fmt.Errorf("unable to generate bytes from point: %v", err)
 	}
 	hashed := sha256.Sum256(pointMarshal)
-	sum := lo.Reduce(hashed[:], func(acc int, b byte, _ int) int { return acc + int(b) }, 0)
-	return sum%2 == 0, nil
+	val := binary.LittleEndian.Uint64(hashed[:unsafe.Sizeof(uint64(0))])
+	return float64(val / math.MaxUint64), err
 }

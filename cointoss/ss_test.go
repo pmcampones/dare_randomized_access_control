@@ -8,9 +8,8 @@ import (
 	"github.com/cloudflare/circl/group"
 	"github.com/cloudflare/circl/secretsharing"
 	"github.com/cloudflare/circl/zk/dleq"
-	"github.com/magiconair/properties/assert"
 	"github.com/samber/lo"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -20,12 +19,12 @@ func TestRecoverSecret(t *testing.T) {
 	threshold := uint(20)
 	secret := g.NewScalar().SetUint64(1234567890)
 	shares := ShareSecret(threshold, nodes, secret)
-	require.Equal(t, int(nodes), len(shares))
+	assert.Equal(t, int(nodes), len(shares))
 	recov1, err := RecoverSecret(threshold, shares[:threshold+1])
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, secret, recov1)
 	recov2, err := RecoverSecret(threshold, shares[1:threshold+2])
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, secret, recov2)
 }
 
@@ -40,9 +39,9 @@ func TestSSWithPoints(t *testing.T) {
 	hiddenShares := lo.Map(shares, func(share secretsharing.Share, _ int) PointShare { return ShareToPoint(share, base) })
 	recov1 := RecoverSecretFromPoints(hiddenShares[:])
 	ptSecBytes, err := pointSecret.MarshalBinary()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	recSecBytes, err := recov1.MarshalBinary()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, recSecBytes, ptSecBytes)
 }
 
@@ -95,16 +94,16 @@ func TestDLEquivalenceManyShares(t *testing.T) {
 		hiddenShare := g.NewElement().Mul(randomBase, share.Value)
 		commitment := g.NewElement().Mul(commitBase, share.Value)
 		proof, err := prover.ProveWithRandomness(share.Value, randomBase, hiddenShare, commitBase, commitment, rnd)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		res := verifier.Verify(randomBase, hiddenShare, commitBase, commitment, proof)
 		assert.Equal(t, res, true)
 	}
 }
 
-func TestHashPointToBool(t *testing.T) {
+func TestHashPointToDouble(t *testing.T) {
 	g := group.Ristretto255
 	point := g.HashToElement([]byte("base"), []byte("point"))
-	b, err := HashPointToBool(point)
-	require.NoError(t, err)
-	fmt.Println(b)
+	val, err := HashPointToDouble(point)
+	assert.NoError(t, err)
+	assert.True(t, val >= 0 && val <= 1)
 }
