@@ -19,6 +19,7 @@ type backnode struct {
 }
 
 type forwardnode struct {
+	id    uuid.UUID // needed only for tests
 	delta []*point
 	next  []*forwardnode
 }
@@ -36,19 +37,22 @@ func initNode(shares []secretsharing.Share, firstNode uuid.UUID) *backnode {
 	}
 }
 
-func addNode(delta []*point, prev []*backnode) *backnode {
+func addNode(id uuid.UUID, delta []*point, prev []*backnode) *backnode {
 	return &backnode{
-		id:    uuid.New(),
+		id:    id,
 		delta: delta,
 		prev:  prev,
 	}
 }
 
+// Assumes no cycles in the graph and no path existing between the nodes in the argument
 func makeSubgraph(nodes []*backnode) *forwardnode {
 	forward := make(map[uuid.UUID]*forwardnode)
 	frontier := nodes
+	var prevFrontier []*backnode
 	for _, node := range nodes {
 		fnode := forwardnode{
+			id:    node.id,
 			delta: node.delta,
 			next:  []*forwardnode{},
 		}
@@ -56,9 +60,10 @@ func makeSubgraph(nodes []*backnode) *forwardnode {
 	}
 	for len(frontier) > 0 {
 		updateForwardNodes(frontier, forward)
-		frontier = updateFrontier(nodes)
+		prevFrontier = frontier
+		frontier = updateFrontier(frontier)
 	}
-	return nil
+	return forward[prevFrontier[0].id]
 }
 
 func updateFrontier(nodes []*backnode) []*backnode {
@@ -83,6 +88,7 @@ func updateForwardNodes(frontier []*backnode, forward map[uuid.UUID]*forwardnode
 			fnode := forward[p.id]
 			if fnode == nil {
 				fnode = &forwardnode{
+					id:    p.id,
 					delta: p.delta,
 					next:  []*forwardnode{},
 				}
