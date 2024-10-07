@@ -1,7 +1,7 @@
 package accesscontrolapp
 
 import (
-	"dare_randomized_access_control/utils"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	. "github.com/google/uuid"
@@ -123,7 +123,7 @@ func (crdt CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, erro
 	}
 	msgBytes := []byte(msg)
 	offsetInput := append(idBytes, msgBytes...)
-	offset := utils.HashToInt(offsetInput)
+	offset := hashToInt(offsetInput)
 	idx += int64(offset)
 	return idx, nil
 }
@@ -166,7 +166,7 @@ func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points uint32
 	pointBytes := make([]byte, unsafe.Sizeof(points))
 	binary.LittleEndian.PutUint32(pointBytes, points)
 	offsetInput := append(append(issuerBytes, addedBytes...), pointBytes...)
-	offset := utils.HashToInt(offsetInput)
+	offset := hashToInt(offsetInput)
 	idx += int64(offset)
 	return idx, nil
 }
@@ -218,7 +218,7 @@ func (crdt CRDT) computeRemIdx(depth int, issuer UUID, removed UUID) (int64, err
 		order = 1
 	}
 	offsetInput := append(first, last...)
-	offset := (utils.HashToInt(offsetInput) / 4) * 4
+	offset := (hashToInt(offsetInput) / 4) * 4
 	idx += int64(offset)
 	idx += order
 	return idx, nil
@@ -232,4 +232,9 @@ func (crdt CRDT) GetOperationList() []*Op {
 		return true
 	})
 	return result
+}
+
+func hashToInt(b []byte) uint32 {
+	hashVal := sha256.Sum256(b)
+	return binary.BigEndian.Uint32(hashVal[:unsafe.Sizeof(uint32(0))])
 }
