@@ -2,6 +2,7 @@ package accesscontrolapp
 
 import (
 	"dare_randomized_access_control/utils"
+	"encoding/binary"
 	"fmt"
 	. "github.com/google/uuid"
 	"github.com/petar/GoLLRB/llrb"
@@ -134,7 +135,7 @@ func (crdt CRDT) Add(issuer, added UUID, points uint32) func(depth int) error {
 		points: points,
 	}
 	return func(depth int) error {
-		idx, err := crdt.computeAddIdx(depth, issuer, added)
+		idx, err := crdt.computeAddIdx(depth, issuer, added, points)
 		if err != nil {
 			return fmt.Errorf("unable to compute operation index: %v", err)
 		}
@@ -150,7 +151,7 @@ func (crdt CRDT) Add(issuer, added UUID, points uint32) func(depth int) error {
 	}
 }
 
-func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID) (int64, error) {
+func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points uint32) (int64, error) {
 	var idx int64
 	idx = int64(depth << (u32Bits + opOffsetSize))
 	idx += int64(int(AddOffset) << u32Bits)
@@ -162,7 +163,9 @@ func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID) (int64, error
 	if err != nil {
 		return 0, fmt.Errorf("unable to marshal added user: %v", err)
 	}
-	offsetInput := append(issuerBytes, addedBytes...)
+	pointBytes := make([]byte, unsafe.Sizeof(points))
+	binary.LittleEndian.PutUint32(pointBytes, points)
+	offsetInput := append(append(issuerBytes, addedBytes...), pointBytes...)
 	offset := utils.HashToInt(offsetInput)
 	idx += int64(offset)
 	return idx, nil

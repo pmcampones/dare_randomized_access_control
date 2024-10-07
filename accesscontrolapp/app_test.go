@@ -126,8 +126,9 @@ func TestShouldFailToPostMessageIssuerNotExists(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId, uint32(1000)), nil)
 	hashgraph.NewNode(crdt.Post(secondId, "I don't exist yet"), []*hashgraph.Node{firstNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(app.msgs))
 }
 
 func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
@@ -143,11 +144,12 @@ func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId, points), nil)
 	hashgraph.NewNode(crdt.Add(secondId, thirdId, uint32(500)), []*hashgraph.Node{firstNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
 }
 
-func TestShouldFailToAddPeerAlreadyExists(t *testing.T) {
+func TestShouldFailToAddPeerAlreadyExistsSequential(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := uint32(1000)
@@ -159,8 +161,26 @@ func TestShouldFailToAddPeerAlreadyExists(t *testing.T) {
 	secondNode := hashgraph.NewNode(crdt.Add(firstId, secondId, uint32(500)), []*hashgraph.Node{firstNode})
 	hashgraph.NewNode(crdt.Add(firstId, secondId, uint32(1)), []*hashgraph.Node{secondNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(app.users))
+}
+
+func TestShouldFailToAddPeerAlreadyExistsConcurrent(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	points := uint32(1000)
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	firstNode := hashgraph.NewNode(crdt.Init(firstId, points), nil)
+	hashgraph.NewNode(crdt.Add(firstId, secondId, uint32(500)), []*hashgraph.Node{firstNode})
+	hashgraph.NewNode(crdt.Add(firstId, secondId, uint32(1)), []*hashgraph.Node{firstNode})
+	firstNode.RunHashgraph(0)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(app.users))
 }
 
 func TestShouldFailToAddPeerLackOfPoints(t *testing.T) {
@@ -172,8 +192,9 @@ func TestShouldFailToAddPeerLackOfPoints(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId, points), nil)
 	hashgraph.NewNode(crdt.Add(firstId, firstId, points+1), []*hashgraph.Node{firstNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
 }
 
 func TestShouldFailToAddPeerCannotAddSelf(t *testing.T) {
@@ -185,8 +206,9 @@ func TestShouldFailToAddPeerCannotAddSelf(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId, points), nil)
 	hashgraph.NewNode(crdt.Add(firstId, firstId, 1), []*hashgraph.Node{firstNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
 }
 
 func TestShouldFailToAddPeerMustGivePoints(t *testing.T) {
@@ -200,8 +222,9 @@ func TestShouldFailToAddPeerMustGivePoints(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId, points), nil)
 	hashgraph.NewNode(crdt.Add(firstId, secondId, 0), []*hashgraph.Node{firstNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
 }
 
 func TestShouldFailRemovePeerIssuerNotExists(t *testing.T) {
@@ -214,8 +237,9 @@ func TestShouldFailRemovePeerIssuerNotExists(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId, uint32(1000)), nil)
 	hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.Node{firstNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
 }
 
 func TestShouldFailRemovePeerUserNotExists(t *testing.T) {
@@ -228,8 +252,9 @@ func TestShouldFailRemovePeerUserNotExists(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId, uint32(1000)), nil)
 	hashgraph.NewNode(crdt.Rem(firstId, secondId), []*hashgraph.Node{firstNode})
 	firstNode.RunHashgraph(0)
-	_, err = ExecuteCRDT(&crdt)
-	assert.Error(t, err)
+	app, err := ExecuteCRDT(&crdt)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
 }
 
 func TestShouldAddUsersConcurrently(t *testing.T) {

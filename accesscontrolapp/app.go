@@ -10,6 +10,7 @@ import (
 	"github.com/cloudflare/circl/secretsharing"
 	"github.com/google/uuid"
 	"github.com/negrel/assert"
+	"log/slog"
 	"math/rand"
 	"unsafe"
 )
@@ -46,27 +47,29 @@ func ExecuteCRDT(crdt *CRDT) (*App, error) {
 		case Add:
 			err := execAdd(op, app)
 			if err != nil {
-				return app, err
+				slog.Warn("Unable to compute add operation", "err", err, "idx", op.idx, "op", op.content.(*AddOp))
 			}
 			i++
 		case Rem:
 			if isConcurrent(opList, i) {
 				err := execConcurrent(op, opList[i+1], op.idx, app)
 				if err != nil {
-					return app, err
+					slog.Warn("Unable to compute concurrent removal operation", "err", err, "idx", op.idx, "op", op.content.(*RemOp))
+					i++
+				} else {
+					i += 2
 				}
-				i += 2
 			} else {
 				err := execRem(op, app)
 				if err != nil {
-					return app, err
+					slog.Warn("Unable to compute removal operation", "err", err, "idx", op.idx, "op", op.content.(*RemOp))
 				}
 				i++
 			}
 		case Post:
 			err := execPost(op, app)
 			if err != nil {
-				return app, err
+				slog.Warn("Unable to compute post operation", "err", err, "idx", op.idx, "op", op.content.(*PostOp))
 			}
 			i++
 		default:
