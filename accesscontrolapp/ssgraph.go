@@ -1,6 +1,7 @@
 package accesscontrolapp
 
 import (
+	"dare_randomized_access_control/hashgraph"
 	"github.com/cloudflare/circl/secretsharing"
 	"github.com/google/uuid"
 	"github.com/negrel/assert"
@@ -19,9 +20,21 @@ type backnode struct {
 }
 
 type forwardnode struct {
-	id    uuid.UUID // needed only for tests
+	id    uuid.UUID
 	delta []*point
 	next  []*forwardnode
+}
+
+func (n *forwardnode) GetId() uuid.UUID {
+	return n.id
+}
+
+func (n *forwardnode) GetNext() []hashgraph.Node {
+	return lo.Map(n.next, func(n *forwardnode, i int) hashgraph.Node { return n })
+}
+
+func (n *forwardnode) ExecFunc() error {
+	return nil //TODO: implement
 }
 
 func initNode(shares []secretsharing.Share, firstNode uuid.UUID) *backnode {
@@ -32,7 +45,7 @@ func initNode(shares []secretsharing.Share, firstNode uuid.UUID) *backnode {
 		}
 	})
 	return &backnode{
-		id:    uuid.New(),
+		id:    firstNode,
 		delta: points,
 	}
 }
@@ -97,4 +110,8 @@ func updateForwardNodes(frontier []*backnode, forward map[uuid.UUID]*forwardnode
 			fnode.next = append(fnode.next, nxtfnode)
 		}
 	}
+}
+
+func (fnode *forwardnode) computeShareState() {
+	hashgraph.RunHashgraph(0, fnode)
 }

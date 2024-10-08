@@ -12,31 +12,31 @@ func TestShouldMakeNode(t *testing.T) {
 		received = append(received, send)
 		return nil
 	}, nil)
-	n.RunHashgraph(0)
+	RunHashgraph(0, n)
 	assert.Equal(t, 1, len(received))
 	assert.Equal(t, send, received[0])
 }
 
 func TestShouldRunSequential(t *testing.T) {
 	numNodes := 100
-	send := make([]int32, 0, 100)
+	send := make([]int32, 0, numNodes)
 	for i := 0; i < numNodes; i++ {
 		send = append(send, int32(i))
 	}
 	received := make([]int32, 0, numNodes)
-	nodes := make([]*Node, 0, numNodes)
+	nodes := make([]*OpNode, 0, numNodes)
 	nodes = append(nodes, NewNode(func(_ int) error {
 		received = append(received, 0)
 		return nil
 	}, nil))
 	for i := 1; i < numNodes; i++ {
-		prev := []*Node{nodes[i-1]}
+		prev := []*OpNode{nodes[i-1]}
 		nodes = append(nodes, NewNode(func(_ int) error {
 			received = append(received, int32(i))
 			return nil
 		}, prev))
 	}
-	nodes[0].RunHashgraph(0)
+	RunHashgraph(0, nodes[0])
 	assert.Equal(t, numNodes, len(send))
 	assert.Equal(t, len(send), len(received))
 	for i := 0; i < numNodes; i++ {
@@ -52,9 +52,9 @@ func TestShouldRunConcurrent(t *testing.T) {
 		NewNode(func(_ int) error {
 			received[int32(i)] = true
 			return nil
-		}, []*Node{firstNode})
+		}, []*OpNode{firstNode})
 	}
-	firstNode.RunHashgraph(0)
+	RunHashgraph(0, firstNode)
 	assert.Equal(t, numNodes, len(received))
 	for i := 0; i < numNodes; i++ {
 		assert.True(t, received[int32(i)])
@@ -71,13 +71,13 @@ func TestShouldProduceSameOrder(t *testing.T) {
 		NewNode(func(_ int) error {
 			ch <- int32(i)
 			return nil
-		}, []*Node{firstNode})
+		}, []*OpNode{firstNode})
 	}
-	go firstNode.RunHashgraph(0)
+	go RunHashgraph(0, firstNode)
 	for i := 0; i < numNodes; i++ {
 		order1 = append(order1, <-ch)
 	}
-	go firstNode.RunHashgraph(0)
+	go RunHashgraph(0, firstNode)
 	for i := 0; i < numNodes; i++ {
 		order2 = append(order2, <-ch)
 	}
@@ -96,13 +96,13 @@ func TestShouldProduceDifferentOrder(t *testing.T) {
 		NewNode(func(_ int) error {
 			ch <- int32(i)
 			return nil
-		}, []*Node{firstNode})
+		}, []*OpNode{firstNode})
 	}
-	go firstNode.RunHashgraph(0)
+	go RunHashgraph(0, firstNode)
 	for i := 0; i < numNodes; i++ {
 		order1 = append(order1, <-ch)
 	}
-	go firstNode.RunHashgraph(1)
+	go RunHashgraph(1, firstNode)
 	for i := 0; i < numNodes; i++ {
 		order2 = append(order2, <-ch)
 	}
@@ -121,15 +121,15 @@ func TestShouldNotExecuteTwice(t *testing.T) {
 	upNode := NewNode(func(_ int) error {
 		executed = append(executed, vals[1])
 		return nil
-	}, []*Node{firstNode})
+	}, []*OpNode{firstNode})
 	downNode := NewNode(func(_ int) error {
 		executed = append(executed, vals[2])
 		return nil
-	}, []*Node{firstNode})
+	}, []*OpNode{firstNode})
 	NewNode(func(_ int) error {
 		executed = append(executed, vals[3])
 		return nil
-	}, []*Node{upNode, downNode})
-	firstNode.RunHashgraph(0)
+	}, []*OpNode{upNode, downNode})
+	RunHashgraph(0, firstNode)
 	assert.Equal(t, len(vals), len(executed))
 }

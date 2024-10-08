@@ -9,28 +9,46 @@ import (
 	"slices"
 )
 
-type Node struct {
+type Node interface {
+	GetId() UUID
+	GetNext() []Node
+	ExecFunc() error
+}
+
+type OpNode struct {
 	id    UUID
 	depth int
 	exec  func() error
-	prev  []*Node
-	next  []*Node
+	prev  []*OpNode
+	next  []*OpNode
 }
 
-func NewNode(op func(depth int) error, prev []*Node) *Node {
+func (n *OpNode) GetId() UUID {
+	return n.id
+}
+
+func (n *OpNode) GetNext() []Node {
+	return lo.Map(n.next, func(n *OpNode, i int) Node { return n })
+}
+
+func (n *OpNode) ExecFunc() error {
+	return n.exec()
+}
+
+func NewNode(op func(depth int) error, prev []*OpNode) *OpNode {
 	var depth int
 	if prev == nil {
-		prev = make([]*Node, 0)
+		prev = make([]*OpNode, 0)
 		depth = 0
 	} else {
-		depth = 1 + lo.Max(lo.Map(prev, func(p *Node, _ int) int { return p.depth }))
+		depth = 1 + lo.Max(lo.Map(prev, func(p *OpNode, _ int) int { return p.depth }))
 	}
-	n := &Node{
+	n := &OpNode{
 		id:    New(),
 		depth: depth,
 		exec:  func() error { return op(depth) },
 		prev:  prev,
-		next:  make([]*Node, 0),
+		next:  make([]*OpNode, 0),
 	}
 	for _, p := range prev {
 		p.addNext(n)
@@ -38,28 +56,28 @@ func NewNode(op func(depth int) error, prev []*Node) *Node {
 	return n
 }
 
-func (n *Node) addNext(nxt *Node) {
+func (n *OpNode) addNext(nxt *OpNode) {
 	n.next = append(n.next, nxt)
 }
 
-func (n *Node) RunHashgraph(seed int) {
+func RunHashgraph(seed int, n Node) {
 	r := rand.New(rand.NewSource(int64(seed)))
-	scheduleOrder := []*Node{n}
+	scheduleOrder := []Node{n}
 	scheduled := make(map[UUID]bool)
-	scheduled[n.id] = true
+	scheduled[n.GetId()] = true
 	executed := make(map[UUID]bool)
 	for len(scheduleOrder) > 0 {
 		curr := scheduleOrder[0]
-		err := curr.exec()
+		err := curr.ExecFunc()
 		if err != nil {
 			panic(err)
 		}
-		executed[curr.id] = true
-		nxt := make([]*Node, 0, len(curr.next))
-		for _, nxtNode := range curr.next {
-			if canScheduleNode(nxtNode, executed, scheduled) {
+		executed[curr.GetId()] = true
+		nxt := make([]Node, 0, len(curr.GetNext()))
+		for _, nxtNode := range curr.GetNext() {
+			if !scheduled[nxtNode.GetId()] {
 				nxt = append(nxt, nxtNode)
-				scheduled[nxtNode.id] = true
+				scheduled[nxtNode.GetId()] = true
 			}
 		}
 		r.Shuffle(len(nxt), func(i, j int) { nxt[i], nxt[j] = nxt[j], nxt[i] })
@@ -77,18 +95,12 @@ func setContains(big, small map[UUID]bool) bool {
 	return lo.EveryBy(ids, func(id UUID) bool { return big[id] })
 }
 
-func listContains(big map[UUID]bool, small []*Node) bool {
-	ids := lo.Map(small, func(n *Node, _ int) UUID { return n.id })
+func listContains(big map[UUID]bool, small []Node) bool {
+	ids := lo.Map(small, func(n Node, _ int) UUID { return n.GetId() })
 	return lo.EveryBy(ids, func(id UUID) bool { return big[id] })
 }
 
-func isDisjoint(col1 map[UUID]bool, col2 []*Node) bool {
-	ids := lo.Map(col2, func(n *Node, _ int) UUID { return n.id })
+func isDisjoint(col1 map[UUID]bool, col2 []Node) bool {
+	ids := lo.Map(col2, func(n Node, _ int) UUID { return n.GetId() })
 	return lo.NoneBy(ids, func(id UUID) bool { return col1[id] })
-}
-
-func canScheduleNode(n *Node, executed map[UUID]bool, scheduled map[UUID]bool) bool {
-	return !scheduled[n.id] && lo.EveryBy(n.prev, func(p *Node) bool {
-		return executed[p.id]
-	})
 }
