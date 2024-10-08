@@ -70,3 +70,54 @@ func TestShouldMakeSimpleLongForwardGraph(t *testing.T) {
 	assert.Equal(t, 0, len(fnode.next))
 	assert.Equal(t, bnodes[len(bnodes)-1].id, fnode.id)
 }
+
+func TestShouldIgnoreFork(t *testing.T) {
+	fork1Nodes := make([]*backnode, 0)
+	fork2Nodes := make([]*backnode, 0)
+	firstNode := initNode([]secretsharing.Share{}, uuid.New())
+	currBNode := firstNode
+	for i := 0; i < 100; i++ {
+		currBNode = addNode(uuid.New(), []*point{}, []*backnode{currBNode})
+		fork1Nodes = append(fork1Nodes, currBNode)
+	}
+	lastFork1 := currBNode
+	currBNode = firstNode
+	for i := 0; i < 100; i++ {
+		currBNode = addNode(uuid.New(), []*point{}, []*backnode{currBNode})
+		fork2Nodes = append(fork2Nodes, currBNode)
+	}
+	lastFork2 := currBNode
+	fnode1 := makeSubgraph([]*backnode{lastFork1})
+	assert.Equal(t, fnode1.id, firstNode.id)
+	for i := 0; i < len(fork1Nodes); i++ {
+		fnode1 = fnode1.next[0]
+		assert.Equal(t, fork1Nodes[i].id, fnode1.id)
+	}
+	fnode2 := makeSubgraph([]*backnode{lastFork2})
+	assert.Equal(t, fnode2.id, firstNode.id)
+	for i := 0; i < len(fork2Nodes); i++ {
+		fnode2 = fnode2.next[0]
+		assert.Equal(t, fork2Nodes[i].id, fnode2.id)
+	}
+}
+
+func TestShouldComputeNonTreeGraph(t *testing.T) {
+	firstNode := initNode([]secretsharing.Share{}, uuid.New())
+	upNode := addNode(uuid.New(), []*point{}, []*backnode{firstNode})
+	downNode := addNode(uuid.New(), []*point{}, []*backnode{firstNode})
+	up2Node := addNode(uuid.New(), []*point{}, []*backnode{upNode, downNode})
+	down2Node := addNode(uuid.New(), []*point{}, []*backnode{upNode, downNode})
+	fnode := makeSubgraph([]*backnode{up2Node, down2Node})
+	assert.Equal(t, fnode.id, firstNode.id)
+	assert.Equal(t, 2, len(fnode.next))
+	assert.NotEqual(t, fnode.next[0].id, fnode.next[1].id)
+	for _, nxt := range fnode.next {
+		assert.Equal(t, 2, len(nxt.next))
+		assert.NotEqual(t, nxt.next[0].id, nxt.next[1].id)
+		assert.True(t, nxt.id == downNode.id || nxt.id == upNode.id)
+		for _, nxt2 := range nxt.next {
+			assert.Equal(t, 0, len(nxt2.next))
+			assert.True(t, nxt2.id == up2Node.id || nxt2.id == down2Node.id)
+		}
+	}
+}
