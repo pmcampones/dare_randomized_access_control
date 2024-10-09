@@ -10,6 +10,8 @@ import (
 	"github.com/cloudflare/circl/secretsharing"
 	"github.com/google/uuid"
 	"github.com/negrel/assert"
+	"github.com/petar/GoLLRB/llrb"
+	"github.com/samber/lo"
 	"log/slog"
 	"math/rand"
 	"unsafe"
@@ -22,7 +24,15 @@ type Msg struct {
 
 type User struct {
 	Id     uuid.UUID
-	Points uint32
+	Points *llrb.LLRB
+}
+
+type pt struct {
+	pt int
+}
+
+func (p *pt) Less(than llrb.Item) bool {
+	return p.pt < than.(*pt).pt
 }
 
 type App struct {
@@ -152,10 +162,12 @@ func (app *App) Init(op *InitOp) error {
 	if len(app.users) != 0 {
 		return fmt.Errorf("already initialized")
 	}
-	user := &User{
-		Id:     op.initial,
-		Points: op.points,
+	pts := llrb.New()
+	for _, p := range lo.Range(int(op.points)) {
+		pts.InsertNoReplace(&pt{pt: p})
 	}
+	points := lo.Map(lo.Range(int(op.points)), func(p int, _ int) uint { return uint(p) })
+	user := newUser(op.initial, points)
 	app.users[op.initial] = user
 	return nil
 }
@@ -169,17 +181,18 @@ func (app *App) AddUser(op *AddOp) error {
 	issuer := app.users[op.issuer]
 	if issuer == nil {
 		return fmt.Errorf("operation issuer is not a user")
-	} else if int(issuer.Points) <= len(op.points) {
-		return fmt.Errorf("issuer cannot give more points than what they have")
+	} else if len(op.points) >= issuer.Points.Len() {
+		return fmt.Errorf("issuer cannot give more or equal points than what they have")
+	} else if !lo.EveryBy(op.points, func(p uint) bool { return issuer.Points.Has(&pt{pt: int(p)}) }) {
+		return fmt.Errorf("issuer cannot give points they do not have")
 	}
 	if app.users[op.added] != nil {
 		return fmt.Errorf("added user already exists")
 	}
-	issuer.Points -= uint32(len(op.points))
-	added := &User{
-		Id:     op.added,
-		Points: uint32(len(op.points)),
+	for _, p := range op.points {
+		issuer.Points.Delete(&pt{pt: int(p)})
 	}
+	added := newUser(op.added, op.points)
 	app.users[op.added] = added
 	return nil
 }
@@ -204,8 +217,8 @@ func (app *App) ConcurrentRemoval(rem1, rem2 *RemOp, seed int64) error {
 func (app *App) computeThreshold(rem1 *RemOp) float64 {
 	issuer := app.users[rem1.issuer]
 	removed := app.users[rem1.removed]
-	issuerPoints := issuer.Points
-	totalPoints := issuerPoints + removed.Points
+	issuerPoints := issuer.Points.Len()
+	totalPoints := issuerPoints + removed.Points.Len()
 	threshold := float64(issuerPoints) / float64(totalPoints)
 	return threshold
 }
@@ -230,9 +243,29 @@ func (app *App) RemUser(op *RemOp) error {
 	}
 	issuer := app.users[op.issuer]
 	removed := app.users[op.removed]
-	issuer.Points += removed.Points
+	assert.True(areSetsDisjoint(issuer.Points, removed.Points), "points must be disjoint")
+	transferPoints(removed.Points, issuer.Points)
 	delete(app.users, op.removed)
 	return nil
+}
+
+func transferPoints(from, to *llrb.LLRB) {
+	from.AscendGreaterOrEqual(from.Min(), func(val llrb.Item) bool {
+		to.InsertNoReplace(val)
+		return true
+	})
+}
+
+func areSetsDisjoint(a, b *llrb.LLRB) bool {
+	disjoint := true
+	a.AscendGreaterOrEqual(a.Min(), func(val llrb.Item) bool {
+		if b.Has(val) {
+			disjoint = false
+			return false
+		}
+		return true
+	})
+	return disjoint
 }
 
 func (app *App) canRemUser(op *RemOp) (bool, string) {
@@ -260,4 +293,15 @@ func (app *App) Post(op *PostOp) error {
 	}
 	app.msgs = append(app.msgs, msg)
 	return nil
+}
+
+func newUser(id uuid.UUID, points []uint) *User {
+	pts := llrb.New()
+	for _, p := range points {
+		pts.InsertNoReplace(&pt{pt: int(p)})
+	}
+	return &User{
+		Id:     id,
+		Points: pts,
+	}
 }
