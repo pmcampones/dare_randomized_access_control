@@ -59,6 +59,7 @@ func (n *forwardnode) fillInitial() {
 }
 
 func (n *forwardnode) updateAccum() {
+	assert.Equal(len(n.delta), len(n.accum.points), "delta and accum must have the same length")
 	for _, tuple := range lo.Zip2(n.delta, n.accum.points) {
 		deltaPt, accumPt := tuple.Unpack()
 		accumPt.owner = deltaPt.owner
@@ -72,10 +73,10 @@ func (n *forwardnode) updateAccum() {
 	}
 }
 
-func initNode(shares []secretsharing.Share, firstNode uuid.UUID) *backnode {
+func initNode(shares []secretsharing.Share, firstNode, firstOwner uuid.UUID) *backnode {
 	points := lo.Map(shares, func(s secretsharing.Share, _ int) *point {
 		return &point{
-			owner: firstNode,
+			owner: firstOwner,
 			val:   s,
 		}
 	})
@@ -95,6 +96,7 @@ func addNode(id uuid.UUID, delta []*point, prev []*backnode) *backnode {
 
 // Assumes no cycles in the graph and no path existing between the nodes in the argument
 func makeSubgraph(nodes []*backnode) *forwardnode {
+	gstate := &graphState{make([]*point, 0)}
 	forward := make(map[uuid.UUID]*forwardnode)
 	frontier := nodes
 	var prevFrontier []*backnode
@@ -103,7 +105,7 @@ func makeSubgraph(nodes []*backnode) *forwardnode {
 			id:    node.id,
 			delta: node.delta,
 			next:  []*forwardnode{},
-			accum: &graphState{make([]*point, 0)},
+			accum: gstate,
 		}
 		forward[node.id] = &fnode
 	}
@@ -149,6 +151,7 @@ func updateForwardNodes(frontier []*backnode, forward map[uuid.UUID]*forwardnode
 	}
 }
 
-func (fnode *forwardnode) computeShareState() {
-	hashgraph.RunHashgraph(0, fnode)
+func (n *forwardnode) computeShareState() []*point {
+	hashgraph.RunHashgraph(0, n)
+	return n.accum.points
 }
