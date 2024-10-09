@@ -33,12 +33,12 @@ type Op struct {
 	idx     int64
 	kind    OpType
 	content interface{}
+	id      UUID
 	prevIds []UUID
 }
 
 type InitOp struct {
 	initial UUID
-	points  uint32
 }
 
 type PostOp struct {
@@ -74,10 +74,9 @@ func NewCRDT() CRDT {
 	return CRDT{tree: llrb.New()}
 }
 
-func (crdt CRDT) Init(firstParticipant UUID, points uint32) func(depth int, prevIds []UUID) error {
+func (crdt CRDT) Init(firstParticipant UUID) func(depth int, id UUID, prevIds []UUID) error {
 	init := &InitOp{
 		initial: firstParticipant,
-		points:  points,
 	}
 	op := &Op{
 		idx:     0,
@@ -85,7 +84,8 @@ func (crdt CRDT) Init(firstParticipant UUID, points uint32) func(depth int, prev
 		content: init,
 		prevIds: []UUID{},
 	}
-	return func(_ int, _ []UUID) error {
+	return func(_ int, id UUID, _ []UUID) error {
+		op.id = id
 		if crdt.tree.ReplaceOrInsert(op) != nil {
 			return fmt.Errorf("init operation had already been issued")
 		}
@@ -93,12 +93,12 @@ func (crdt CRDT) Init(firstParticipant UUID, points uint32) func(depth int, prev
 	}
 }
 
-func (crdt CRDT) Post(poster UUID, msg string) func(depth int, prevIds []UUID) error {
+func (crdt CRDT) Post(poster UUID, msg string) func(depth int, id UUID, prevIds []UUID) error {
 	post := &PostOp{
 		poster: poster,
 		msg:    msg,
 	}
-	return func(depth int, prevIds []UUID) error {
+	return func(depth int, id UUID, prevIds []UUID) error {
 		idx, err := crdt.computePostIdx(depth, poster, msg)
 		if err != nil {
 			return fmt.Errorf("unable to compute operation index: %v", err)
@@ -107,6 +107,7 @@ func (crdt CRDT) Post(poster UUID, msg string) func(depth int, prevIds []UUID) e
 			idx:     idx,
 			kind:    Post,
 			content: post,
+			id:      id,
 			prevIds: prevIds,
 		}
 		if crdt.tree.ReplaceOrInsert(op) != nil {
@@ -131,13 +132,13 @@ func (crdt CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, erro
 	return idx, nil
 }
 
-func (crdt CRDT) Add(issuer, added UUID, points []uint) func(depth int, prevIds []UUID) error {
+func (crdt CRDT) Add(issuer, added UUID, points []uint) func(depth int, id UUID, prevIds []UUID) error {
 	add := &AddOp{
 		issuer: issuer,
 		added:  added,
 		points: points,
 	}
-	return func(depth int, prevIds []UUID) error {
+	return func(depth int, id UUID, prevIds []UUID) error {
 		idx, err := crdt.computeAddIdx(depth, issuer, added, points)
 		if err != nil {
 			return fmt.Errorf("unable to compute operation index: %v", err)
@@ -146,6 +147,7 @@ func (crdt CRDT) Add(issuer, added UUID, points []uint) func(depth int, prevIds 
 			idx:     idx,
 			kind:    Add,
 			content: add,
+			id:      id,
 			prevIds: prevIds,
 		}
 		if crdt.tree.ReplaceOrInsert(op) != nil {
@@ -175,12 +177,12 @@ func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points []uint
 	return idx, nil
 }
 
-func (crdt CRDT) Rem(issuer, removed UUID) func(depth int, prevIds []UUID) error {
+func (crdt CRDT) Rem(issuer, removed UUID) func(depth int, id UUID, prevIds []UUID) error {
 	rem := &RemOp{
 		issuer:  issuer,
 		removed: removed,
 	}
-	return func(depth int, prevIds []UUID) error {
+	return func(depth int, id UUID, prevIds []UUID) error {
 		idx, err := crdt.computeRemIdx(depth, issuer, removed)
 		if err != nil {
 			return fmt.Errorf("unable to compute operation index: %v", err)
@@ -189,6 +191,7 @@ func (crdt CRDT) Rem(issuer, removed UUID) func(depth int, prevIds []UUID) error
 			idx:     idx,
 			kind:    Rem,
 			content: rem,
+			id:      id,
 			prevIds: prevIds,
 		}
 		if crdt.tree.ReplaceOrInsert(op) != nil {

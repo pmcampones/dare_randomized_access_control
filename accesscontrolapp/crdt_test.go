@@ -50,21 +50,21 @@ func genOperations(maxDepth int, ids []uuid.UUID, repetitions int, r *rand.Rand,
 			added := ids[r.Intn(len(ids))]
 			points := lo.Map(lo.Range(r.Intn(1000)), func(i int, _ int) uint { return uint(i) })
 			exec := func() error {
-				return crdt.Add(issuer, added, points)(d, []uuid.UUID{})
+				return crdt.Add(issuer, added, points)(d, uuid.New(), []uuid.UUID{})
 			}
 			ops = append(ops, exec)
 		}
 		for i := 0; i < repetitions; i++ {
 			rem := ids[r.Intn(len(ids))]
 			exec := func() error {
-				return crdt.Rem(issuer, rem)(d, []uuid.UUID{})
+				return crdt.Rem(issuer, rem)(d, uuid.New(), []uuid.UUID{})
 			}
 			ops = append(ops, exec)
 		}
 		for i := 0; i < repetitions; i++ {
 			msg := fmt.Sprintf("%d%d", d, i)
 			exec := func() error {
-				return crdt.Post(issuer, msg)(d, []uuid.UUID{})
+				return crdt.Post(issuer, msg)(d, uuid.New(), []uuid.UUID{})
 			}
 			ops = append(ops, exec)
 		}
@@ -101,7 +101,7 @@ func remRandom(t *testing.T, r *rand.Rand, crdt CRDT) func() error {
 	added, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	return func() error {
-		return crdt.Rem(issuer, added)(0, []uuid.UUID{})
+		return crdt.Rem(issuer, added)(0, uuid.New(), []uuid.UUID{})
 	}
 }
 
@@ -112,7 +112,7 @@ func addRandom(t *testing.T, r *rand.Rand, crdt CRDT) func() error {
 	assert.NoError(t, err)
 	points := lo.Map(lo.Range(r.Intn(1000)), func(i int, _ int) uint { return uint(i) })
 	return func() error {
-		return crdt.Add(issuer, added, points)(0, []uuid.UUID{})
+		return crdt.Add(issuer, added, points)(0, uuid.New(), []uuid.UUID{})
 	}
 }
 
@@ -120,7 +120,7 @@ func postRandom(t *testing.T, r *rand.Rand, crdt CRDT) func() error {
 	issuer, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	return func() error {
-		return crdt.Post(issuer, fmt.Sprintf("%d", r.Int()))(0, []uuid.UUID{})
+		return crdt.Post(issuer, fmt.Sprintf("%d", r.Int()))(0, uuid.New(), []uuid.UUID{})
 	}
 }
 
@@ -147,10 +147,10 @@ func genConflictingRems(ids []uuid.UUID, r *rand.Rand, crdt CRDT) []func() error
 	id0 := ids[r.Intn(len(ids))]
 	id1 := ids[r.Intn(len(ids))]
 	rem0 := func() error {
-		return crdt.Rem(id0, id1)(0, []uuid.UUID{})
+		return crdt.Rem(id0, id1)(0, uuid.New(), []uuid.UUID{})
 	}
 	rem1 := func() error {
-		return crdt.Rem(id1, id0)(0, []uuid.UUID{})
+		return crdt.Rem(id1, id0)(0, uuid.New(), []uuid.UUID{})
 	}
 	return []func() error{rem0, rem1}
 }

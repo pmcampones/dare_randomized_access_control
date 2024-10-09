@@ -36,13 +36,16 @@ func (p *pt) Less(than llrb.Item) bool {
 }
 
 type App struct {
-	secret secretsharing.Share
-	users  map[uuid.UUID]*User
-	msgs   []Msg
+	secret     secretsharing.Share
+	numPoints  int
+	threshold  int
+	users      map[uuid.UUID]*User
+	msgs       []Msg
+	graphNodes map[uuid.UUID]*backnode
 }
 
-func ExecuteCRDT(crdt *CRDT) (*App, error) {
-	app := NewApp()
+func ExecuteCRDT(crdt *CRDT, numPoints, threshold int) (*App, error) {
+	app := NewApp(numPoints, threshold)
 	opList := crdt.GetOperationList()
 	i := 0
 	for i < len(opList) {
@@ -87,6 +90,90 @@ func ExecuteCRDT(crdt *CRDT) (*App, error) {
 		}
 	}
 	return app, nil
+}
+
+func NewApp(numPoints, threshold int) *App {
+	r := rand.New(rand.NewSource(int64(0)))
+	share := secretsharing.Share{
+		ID:    group.Ristretto255.NewScalar(),
+		Value: group.Ristretto255.RandomScalar(r),
+	}
+	return &App{
+		secret:     share,
+		numPoints:  numPoints,
+		threshold:  threshold,
+		users:      make(map[uuid.UUID]*User),
+		msgs:       make([]Msg, 0),
+		graphNodes: make(map[uuid.UUID]*backnode),
+	}
+}
+
+func execInit(op *Op, app *App) error {
+	if len(app.users) != 0 {
+		return fmt.Errorf("already initialized")
+	}
+	pts := llrb.New()
+	init := op.content.(*InitOp)
+	for _, p := range lo.Range(app.numPoints) {
+		pts.InsertNoReplace(&pt{pt: p})
+	}
+	points := lo.Map(lo.Range(app.numPoints), func(p int, _ int) uint { return uint(p) })
+	user := newUser(init.initial, points)
+	bnode := app.initialBacknode(op.id, init.initial, app.numPoints)
+	app.graphNodes[bnode.id] = bnode
+	app.users[init.initial] = user
+	return nil
+}
+
+func execAdd(op *Op, app *App) error {
+	add := op.content.(*AddOp)
+	if canAdd, reason := app.canAdd(op); !canAdd {
+		return fmt.Errorf(reason)
+	}
+	issuer := app.users[add.issuer]
+	for _, p := range add.points {
+		issuer.Points.Delete(&pt{pt: int(p)})
+	}
+	added := newUser(add.added, add.points)
+	app.users[add.added] = added
+	app.graphNodes[op.id] = addBnode(op, app, add)
+	return nil
+}
+
+func addBnode(op *Op, app *App, add *AddOp) *backnode {
+	ot := lo.Map(add.points, func(p uint, _ int) *ownerTransfer { return &ownerTransfer{shareIdx: p, owner: add.added} })
+	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
+	bnode := &backnode{
+		id:             op.id,
+		deltaVals:      cointoss.ShareRandomSecret(uint(app.threshold), uint(app.numPoints)),
+		ownerTransfers: ot,
+		prev:           prev,
+	}
+	return bnode
+}
+
+func (app *App) canAdd(op *Op) (bool, string) {
+	if !lo.EveryBy(op.prevIds, func(prev uuid.UUID) bool { return app.graphNodes[prev] != nil }) {
+		return false, "previous operation ids do not exist"
+	}
+	add := op.content.(*AddOp)
+	if add.issuer == add.added {
+		return false, "user cannot add themselves"
+	} else if len(add.points) == 0 {
+		return false, "at least a single point must be given"
+	}
+	issuer := app.users[add.issuer]
+	if issuer == nil {
+		return false, "operation issuer is not a user"
+	} else if len(add.points) >= issuer.Points.Len() {
+		return false, "issuer cannot give more or equal points than what they have"
+	} else if !lo.EveryBy(add.points, func(p uint) bool { return issuer.Points.Has(&pt{pt: int(p)}) }) {
+		return false, "issuer cannot give points they do not have"
+	}
+	if app.users[add.added] != nil {
+		return false, "added user already exists"
+	}
+	return true, ""
 }
 
 func isConcurrent(opList []*Op, i int) bool {
@@ -136,74 +223,17 @@ func execRem(op *Op, app *App) error {
 	return nil
 }
 
-func execInit(op *Op, app *App) error {
-	initOp := op.content.(*InitOp)
-	err := app.Init(initOp)
-	if err != nil {
-		return fmt.Errorf("unable to compute init operation: %v", err)
+func (app *App) initialBacknode(id, owner uuid.UUID, points int) *backnode {
+	shares := cointoss.ShareRandomSecret(uint(app.threshold), uint(points))
+	ot := lo.Map(shares, func(_ secretsharing.Share, i int) *ownerTransfer {
+		return &ownerTransfer{shareIdx: uint(i), owner: owner}
+	})
+	return &backnode{
+		id:             id,
+		deltaVals:      shares,
+		ownerTransfers: ot,
+		prev:           []*backnode{},
 	}
-	return nil
-}
-
-func execAdd(op *Op, app *App) error {
-	addOp := op.content.(*AddOp)
-	err := app.AddUser(addOp, op.prevIds)
-	if err != nil {
-		return fmt.Errorf("unable to compute add operation: %v", err)
-	}
-	return nil
-}
-
-func NewApp() *App {
-	r := rand.New(rand.NewSource(int64(0)))
-	share := secretsharing.Share{
-		ID:    group.Ristretto255.NewScalar(),
-		Value: group.Ristretto255.RandomScalar(r),
-	}
-	return &App{
-		secret: share,
-		users:  make(map[uuid.UUID]*User),
-		msgs:   make([]Msg, 0),
-	}
-}
-
-func (app *App) Init(op *InitOp) error {
-	if len(app.users) != 0 {
-		return fmt.Errorf("already initialized")
-	}
-	pts := llrb.New()
-	for _, p := range lo.Range(int(op.points)) {
-		pts.InsertNoReplace(&pt{pt: p})
-	}
-	points := lo.Map(lo.Range(int(op.points)), func(p int, _ int) uint { return uint(p) })
-	user := newUser(op.initial, points)
-	app.users[op.initial] = user
-	return nil
-}
-
-func (app *App) AddUser(op *AddOp, prevIds []uuid.UUID) error {
-	if op.issuer == op.added {
-		return fmt.Errorf("user cannot add themselves")
-	} else if len(op.points) == 0 {
-		return fmt.Errorf("at least a single point must be given")
-	}
-	issuer := app.users[op.issuer]
-	if issuer == nil {
-		return fmt.Errorf("operation issuer is not a user")
-	} else if len(op.points) >= issuer.Points.Len() {
-		return fmt.Errorf("issuer cannot give more or equal points than what they have")
-	} else if !lo.EveryBy(op.points, func(p uint) bool { return issuer.Points.Has(&pt{pt: int(p)}) }) {
-		return fmt.Errorf("issuer cannot give points they do not have")
-	}
-	if app.users[op.added] != nil {
-		return fmt.Errorf("added user already exists")
-	}
-	for _, p := range op.points {
-		issuer.Points.Delete(&pt{pt: int(p)})
-	}
-	added := newUser(op.added, op.points)
-	app.users[op.added] = added
-	return nil
 }
 
 func (app *App) computeThreshold(rem1 *RemOp) float64 {

@@ -19,6 +19,10 @@ type PointShare struct {
 	Point group.Element
 }
 
+func ShareRandomSecret(threshold uint, nodes uint) []secretsharing.Share {
+	return ShareSecret(threshold, nodes, group.Ristretto255.RandomScalar(rand.Reader))
+}
+
 func ShareSecret(threshold uint, nodes uint, secret group.Scalar) []secretsharing.Share {
 	secretSharing := secretsharing.New(rand.Reader, threshold, secret)
 	return secretSharing.Share(nodes)
