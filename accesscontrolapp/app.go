@@ -163,22 +163,22 @@ func (app *App) Init(op *InitOp) error {
 func (app *App) AddUser(op *AddOp) error {
 	if op.issuer == op.added {
 		return fmt.Errorf("user cannot add themselves")
-	} else if op.points == 0 {
+	} else if len(op.points) == 0 {
 		return fmt.Errorf("at least a single point must be given")
 	}
 	issuer := app.users[op.issuer]
 	if issuer == nil {
 		return fmt.Errorf("operation issuer is not a user")
-	} else if issuer.Points <= op.points {
+	} else if int(issuer.Points) <= len(op.points) {
 		return fmt.Errorf("issuer cannot give more points than what they have")
 	}
 	if app.users[op.added] != nil {
 		return fmt.Errorf("added user already exists")
 	}
-	issuer.Points -= op.points
+	issuer.Points -= uint32(len(op.points))
 	added := &User{
 		Id:     op.added,
-		Points: op.points,
+		Points: uint32(len(op.points)),
 	}
 	app.users[op.added] = added
 	return nil

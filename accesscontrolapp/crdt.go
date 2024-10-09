@@ -48,7 +48,7 @@ type PostOp struct {
 type AddOp struct {
 	issuer UUID
 	added  UUID
-	points uint32
+	points []uint
 }
 
 type RemOp struct {
@@ -128,7 +128,7 @@ func (crdt CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, erro
 	return idx, nil
 }
 
-func (crdt CRDT) Add(issuer, added UUID, points uint32) func(depth int) error {
+func (crdt CRDT) Add(issuer, added UUID, points []uint) func(depth int) error {
 	add := &AddOp{
 		issuer: issuer,
 		added:  added,
@@ -151,7 +151,7 @@ func (crdt CRDT) Add(issuer, added UUID, points uint32) func(depth int) error {
 	}
 }
 
-func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points uint32) (int64, error) {
+func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points []uint) (int64, error) {
 	var idx int64
 	idx = int64(depth << (u32Bits + opOffsetSize))
 	idx += int64(int(AddOffset) << u32Bits)
@@ -164,7 +164,7 @@ func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points uint32
 		return 0, fmt.Errorf("unable to marshal added user: %v", err)
 	}
 	pointBytes := make([]byte, unsafe.Sizeof(points))
-	binary.LittleEndian.PutUint32(pointBytes, points)
+	binary.LittleEndian.PutUint32(pointBytes, uint32(len(points)))
 	offsetInput := append(append(issuerBytes, addedBytes...), pointBytes...)
 	offset := hashToInt(offsetInput)
 	idx += int64(offset)

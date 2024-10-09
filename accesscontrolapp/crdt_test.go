@@ -3,6 +3,7 @@ package accesscontrolapp
 import (
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"testing"
@@ -47,9 +48,9 @@ func genOperations(maxDepth int, ids []uuid.UUID, repetitions int, r *rand.Rand,
 		issuer := ids[d]
 		for i := 0; i < repetitions; i++ {
 			added := ids[r.Intn(len(ids))]
-			points := r.Intn(1000)
+			points := lo.Map(lo.Range(r.Intn(1000)), func(i int, _ int) uint { return uint(i) })
 			exec := func() error {
-				return crdt.Add(issuer, added, uint32(points))(d)
+				return crdt.Add(issuer, added, points)(d)
 			}
 			ops = append(ops, exec)
 		}
@@ -109,9 +110,9 @@ func addRandom(t *testing.T, r *rand.Rand, crdt CRDT) func() error {
 	assert.NoError(t, err)
 	added, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
-	points := r.Intn(1000)
+	points := lo.Map(lo.Range(r.Intn(1000)), func(i int, _ int) uint { return uint(i) })
 	return func() error {
-		return crdt.Add(issuer, added, uint32(points))(0)
+		return crdt.Add(issuer, added, points)(0)
 	}
 }
 
