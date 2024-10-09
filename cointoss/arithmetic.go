@@ -31,3 +31,7 @@ func mulPoint(a group.Element, b group.Scalar) group.Element {
 func addPoint(a, b group.Element) group.Element {
 	return group.Ristretto255.NewElement().Add(a, b)
 }
+
+func AddScalar(a, b group.Scalar) group.Scalar {
+	return group.Ristretto255.NewScalar().Add(a, b)
+}

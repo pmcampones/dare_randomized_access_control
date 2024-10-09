@@ -1,6 +1,7 @@
 package accesscontrolapp
 
 import (
+	"dare_randomized_access_control/cointoss"
 	"dare_randomized_access_control/hashgraph"
 	"github.com/cloudflare/circl/secretsharing"
 	"github.com/google/uuid"
@@ -23,6 +24,11 @@ type forwardnode struct {
 	id    uuid.UUID
 	delta []*point
 	next  []*forwardnode
+	accum *graphState
+}
+
+type graphState struct {
+	points []*point
 }
 
 func (n *forwardnode) GetId() uuid.UUID {
@@ -34,7 +40,36 @@ func (n *forwardnode) GetNext() []hashgraph.Node {
 }
 
 func (n *forwardnode) ExecFunc() error {
-	return nil //TODO: implement
+	if len(n.accum.points) == 0 {
+		n.fillInitial()
+	} else {
+		n.updateAccum()
+	}
+	return nil
+}
+
+func (n *forwardnode) fillInitial() {
+	for _, p := range n.delta {
+		ptCpy := &point{
+			owner: p.owner,
+			val:   p.val,
+		}
+		n.accum.points = append(n.accum.points, ptCpy)
+	}
+}
+
+func (n *forwardnode) updateAccum() {
+	for _, tuple := range lo.Zip2(n.delta, n.accum.points) {
+		deltaPt, accumPt := tuple.Unpack()
+		accumPt.owner = deltaPt.owner
+		accumVal := accumPt.val.Value
+		deltaVal := deltaPt.val.Value
+		share := secretsharing.Share{
+			ID:    accumPt.val.ID,
+			Value: cointoss.AddScalar(accumVal, deltaVal),
+		}
+		accumPt.val = share
+	}
 }
 
 func initNode(shares []secretsharing.Share, firstNode uuid.UUID) *backnode {
@@ -68,6 +103,7 @@ func makeSubgraph(nodes []*backnode) *forwardnode {
 			id:    node.id,
 			delta: node.delta,
 			next:  []*forwardnode{},
+			accum: &graphState{make([]*point, 0)},
 		}
 		forward[node.id] = &fnode
 	}
@@ -104,6 +140,7 @@ func updateForwardNodes(frontier []*backnode, forward map[uuid.UUID]*forwardnode
 					id:    p.id,
 					delta: p.delta,
 					next:  []*forwardnode{},
+					accum: nxtfnode.accum,
 				}
 				forward[p.id] = fnode
 			}
