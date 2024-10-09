@@ -35,7 +35,7 @@ func (n *OpNode) ExecFunc() error {
 	return n.exec()
 }
 
-func NewNode(op func(depth int) error, prev []*OpNode) *OpNode {
+func NewNode(op func(depth int, prevIds []UUID) error, prev []*OpNode) *OpNode {
 	var depth int
 	if prev == nil {
 		prev = make([]*OpNode, 0)
@@ -43,10 +43,11 @@ func NewNode(op func(depth int) error, prev []*OpNode) *OpNode {
 	} else {
 		depth = 1 + lo.Max(lo.Map(prev, func(p *OpNode, _ int) int { return p.depth }))
 	}
+	prevIds := lo.Map(prev, func(p *OpNode, _ int) UUID { return p.id })
 	n := &OpNode{
 		id:    New(),
 		depth: depth,
-		exec:  func() error { return op(depth) },
+		exec:  func() error { return op(depth, prevIds) },
 		prev:  prev,
 		next:  make([]*OpNode, 0),
 	}

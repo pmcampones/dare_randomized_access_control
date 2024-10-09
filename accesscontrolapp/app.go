@@ -101,7 +101,7 @@ func isConcurrent(opList []*Op, i int) bool {
 
 func execPost(op *Op, app *App) error {
 	postOp := op.content.(*PostOp)
-	err := app.Post(postOp)
+	err := app.Post(postOp, op.prevIds)
 	if err != nil {
 		return fmt.Errorf("unable to compute post operation: %v", err)
 	}
@@ -111,16 +111,25 @@ func execPost(op *Op, app *App) error {
 func execConcurrent(op1, op2 *Op, seed int64, app *App) error {
 	rem1 := op1.content.(*RemOp)
 	rem2 := op2.content.(*RemOp)
-	err := app.ConcurrentRemoval(rem1, rem2, seed)
-	if err != nil {
-		return fmt.Errorf("unable to compute concurrent removal operation: %v", err)
+	canRem, reason := app.canRemUser(rem1)
+	if !canRem {
+		return fmt.Errorf(reason)
 	}
-	return nil
+	coin, err := computeCoinToss(seed, app.secret)
+	if err != nil {
+		return fmt.Errorf("unable to compute coin toss: %v", err)
+	}
+	threshold := app.computeThreshold(rem1)
+	if coin < threshold {
+		return app.RemUser(rem1, op1.prevIds)
+	} else {
+		return app.RemUser(rem2, op2.prevIds)
+	}
 }
 
 func execRem(op *Op, app *App) error {
 	remOp := op.content.(*RemOp)
-	err := app.RemUser(remOp)
+	err := app.RemUser(remOp, op.prevIds)
 	if err != nil {
 		return fmt.Errorf("unable to compute remove operation: %v", err)
 	}
@@ -138,7 +147,7 @@ func execInit(op *Op, app *App) error {
 
 func execAdd(op *Op, app *App) error {
 	addOp := op.content.(*AddOp)
-	err := app.AddUser(addOp)
+	err := app.AddUser(addOp, op.prevIds)
 	if err != nil {
 		return fmt.Errorf("unable to compute add operation: %v", err)
 	}
@@ -172,7 +181,7 @@ func (app *App) Init(op *InitOp) error {
 	return nil
 }
 
-func (app *App) AddUser(op *AddOp) error {
+func (app *App) AddUser(op *AddOp, prevIds []uuid.UUID) error {
 	if op.issuer == op.added {
 		return fmt.Errorf("user cannot add themselves")
 	} else if len(op.points) == 0 {
@@ -197,23 +206,6 @@ func (app *App) AddUser(op *AddOp) error {
 	return nil
 }
 
-func (app *App) ConcurrentRemoval(rem1, rem2 *RemOp, seed int64) error {
-	canRem, reason := app.canRemUser(rem1)
-	if !canRem {
-		return fmt.Errorf(reason)
-	}
-	coin, err := computeCoinToss(seed, app.secret)
-	if err != nil {
-		return fmt.Errorf("unable to compute coin toss: %v", err)
-	}
-	threshold := app.computeThreshold(rem1)
-	if coin < threshold {
-		return app.RemUser(rem1)
-	} else {
-		return app.RemUser(rem2)
-	}
-}
-
 func (app *App) computeThreshold(rem1 *RemOp) float64 {
 	issuer := app.users[rem1.issuer]
 	removed := app.users[rem1.removed]
@@ -236,7 +228,7 @@ func computeCoinToss(seed int64, secret secretsharing.Share) (float64, error) {
 	return coin, nil
 }
 
-func (app *App) RemUser(op *RemOp) error {
+func (app *App) RemUser(op *RemOp, prevIds []uuid.UUID) error {
 	canRem, reason := app.canRemUser(op)
 	if !canRem {
 		return fmt.Errorf(reason)
@@ -282,7 +274,7 @@ func (app *App) canRemUser(op *RemOp) (bool, string) {
 	return true, ""
 }
 
-func (app *App) Post(op *PostOp) error {
+func (app *App) Post(op *PostOp, prevIds []uuid.UUID) error {
 	poster := app.users[op.poster]
 	if poster == nil {
 		return fmt.Errorf("operation poster is not a user")
