@@ -15,16 +15,23 @@ type point struct {
 }
 
 type backnode struct {
-	id    uuid.UUID
-	delta []*point
-	prev  []*backnode
+	id             uuid.UUID
+	deltaVals      []secretsharing.Share
+	ownerTransfers []*ownerTransfer
+	prev           []*backnode
 }
 
 type forwardnode struct {
-	id    uuid.UUID
-	delta []*point
-	next  []*forwardnode
-	accum *graphState
+	id             uuid.UUID
+	deltaVals      []secretsharing.Share
+	ownerTransfers []*ownerTransfer
+	next           []*forwardnode
+	accum          *graphState
+}
+
+type ownerTransfer struct {
+	shareIdx uint
+	owner    uuid.UUID
 }
 
 type graphState struct {
@@ -49,48 +56,46 @@ func (n *forwardnode) ExecFunc() error {
 }
 
 func (n *forwardnode) fillInitial() {
-	for _, p := range n.delta {
-		ptCpy := &point{
-			owner: p.owner,
-			val:   p.val,
+	assert.Equal(len(n.deltaVals), len(n.ownerTransfers), "deltaVals and ownerTransfers must have the same length")
+	n.accum.points = lo.ZipBy2(n.deltaVals, n.ownerTransfers, func(val secretsharing.Share, owner *ownerTransfer) *point {
+		return &point{
+			owner: owner.owner,
+			val:   val,
 		}
-		n.accum.points = append(n.accum.points, ptCpy)
-	}
+	})
 }
 
 func (n *forwardnode) updateAccum() {
-	assert.Equal(len(n.delta), len(n.accum.points), "delta and accum must have the same length")
-	for _, tuple := range lo.Zip2(n.delta, n.accum.points) {
-		deltaPt, accumPt := tuple.Unpack()
-		accumPt.owner = deltaPt.owner
-		accumVal := accumPt.val.Value
-		deltaVal := deltaPt.val.Value
-		share := secretsharing.Share{
-			ID:    accumPt.val.ID,
-			Value: cointoss.AddScalar(accumVal, deltaVal),
-		}
-		accumPt.val = share
+	for _, ownerTransfer := range n.ownerTransfers {
+		n.accum.points[ownerTransfer.shareIdx].owner = ownerTransfer.owner
+	}
+	for _, tuple := range lo.Zip2(n.deltaVals, n.accum.points) {
+		val, pt := tuple.Unpack()
+		pt.val.Value = cointoss.AddScalar(pt.val.Value, val.Value)
 	}
 }
 
 func initNode(shares []secretsharing.Share, firstNode, firstOwner uuid.UUID) *backnode {
-	points := lo.Map(shares, func(s secretsharing.Share, _ int) *point {
-		return &point{
-			owner: firstOwner,
-			val:   s,
+	ownerTransfers := lo.Map(shares, func(_ secretsharing.Share, i int) *ownerTransfer {
+		return &ownerTransfer{
+			shareIdx: uint(i),
+			owner:    firstOwner,
 		}
 	})
 	return &backnode{
-		id:    firstNode,
-		delta: points,
+		id:             firstNode,
+		deltaVals:      shares,
+		ownerTransfers: ownerTransfers,
+		prev:           []*backnode{},
 	}
 }
 
-func addNode(id uuid.UUID, delta []*point, prev []*backnode) *backnode {
+func addNode(id uuid.UUID, deltaVals []secretsharing.Share, ownerTransfers []*ownerTransfer, prev []*backnode) *backnode {
 	return &backnode{
-		id:    id,
-		delta: delta,
-		prev:  prev,
+		id:             id,
+		deltaVals:      deltaVals,
+		ownerTransfers: ownerTransfers,
+		prev:           prev,
 	}
 }
 
@@ -102,10 +107,11 @@ func makeSubgraph(nodes []*backnode) *forwardnode {
 	var prevFrontier []*backnode
 	for _, node := range nodes {
 		fnode := forwardnode{
-			id:    node.id,
-			delta: node.delta,
-			next:  []*forwardnode{},
-			accum: gstate,
+			id:             node.id,
+			deltaVals:      node.deltaVals,
+			ownerTransfers: node.ownerTransfers,
+			next:           []*forwardnode{},
+			accum:          gstate,
 		}
 		forward[node.id] = &fnode
 	}
@@ -139,15 +145,26 @@ func updateForwardNodes(frontier []*backnode, forward map[uuid.UUID]*forwardnode
 			fnode := forward[p.id]
 			if fnode == nil {
 				fnode = &forwardnode{
-					id:    p.id,
-					delta: p.delta,
-					next:  []*forwardnode{},
-					accum: nxtfnode.accum,
+					id:             p.id,
+					deltaVals:      p.deltaVals,
+					ownerTransfers: p.ownerTransfers,
+					next:           []*forwardnode{},
+					accum:          nxtfnode.accum,
 				}
 				forward[p.id] = fnode
 			}
 			fnode.next = append(fnode.next, nxtfnode)
 		}
+	}
+}
+
+func (n *backnode) newForward(gs *graphState) *forwardnode {
+	return &forwardnode{
+		id:             n.id,
+		deltaVals:      n.deltaVals,
+		ownerTransfers: n.ownerTransfers,
+		next:           []*forwardnode{},
+		accum:          gs,
 	}
 }
 

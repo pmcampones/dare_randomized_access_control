@@ -22,7 +22,7 @@ func TestShouldBeSingleBNode(t *testing.T) {
 
 func TestShouldFollowInitial(t *testing.T) {
 	firstNode := initNode([]secretsharing.Share{}, uuid.New(), uuid.New())
-	secondNode := addNode(uuid.New(), []*point{}, []*backnode{firstNode})
+	secondNode := addNode(uuid.New(), nil, nil, []*backnode{firstNode})
 	assert.Equal(t, 1, len(secondNode.prev))
 	assert.Equal(t, firstNode, secondNode.prev[0])
 }
@@ -31,7 +31,7 @@ func TestManyShouldFollowInitial(t *testing.T) {
 	firstNode := initNode([]secretsharing.Share{}, uuid.New(), uuid.New())
 	curr := firstNode
 	for i := 0; i < 100; i++ {
-		curr = addNode(uuid.New(), []*point{}, []*backnode{curr})
+		curr = addNode(uuid.New(), nil, nil, []*backnode{curr})
 	}
 	for len(curr.prev) > 0 {
 		assert.Equal(t, 1, len(curr.prev))
@@ -42,9 +42,9 @@ func TestManyShouldFollowInitial(t *testing.T) {
 
 func TestShouldFork(t *testing.T) {
 	firstNode := initNode([]secretsharing.Share{}, uuid.New(), uuid.New())
-	upFork := addNode(uuid.New(), []*point{}, []*backnode{firstNode})
-	downFork := addNode(uuid.New(), []*point{}, []*backnode{firstNode})
-	last := addNode(uuid.New(), []*point{}, []*backnode{upFork, downFork})
+	upFork := addEmpty([]*backnode{firstNode})
+	downFork := addEmpty([]*backnode{firstNode})
+	last := addEmpty([]*backnode{upFork, downFork})
 	assert.Equal(t, 2, len(last.prev))
 	assert.Equal(t, firstNode, last.prev[0].prev[0])
 	assert.Equal(t, firstNode, last.prev[1].prev[0])
@@ -61,7 +61,7 @@ func TestShouldMakeSimpleLongForwardGraph(t *testing.T) {
 	currBNode := initNode([]secretsharing.Share{}, uuid.New(), uuid.New())
 	bnodes = append(bnodes, currBNode)
 	for i := 0; i < 100; i++ {
-		currBNode = addNode(uuid.New(), []*point{}, []*backnode{currBNode})
+		currBNode = addEmpty([]*backnode{currBNode})
 		bnodes = append(bnodes, currBNode)
 	}
 	fnode := makeSubgraph([]*backnode{currBNode})
@@ -80,13 +80,13 @@ func TestShouldIgnoreFork(t *testing.T) {
 	firstNode := initNode([]secretsharing.Share{}, uuid.New(), uuid.New())
 	currBNode := firstNode
 	for i := 0; i < 100; i++ {
-		currBNode = addNode(uuid.New(), []*point{}, []*backnode{currBNode})
+		currBNode = addEmpty([]*backnode{currBNode})
 		fork1Nodes = append(fork1Nodes, currBNode)
 	}
 	lastFork1 := currBNode
 	currBNode = firstNode
 	for i := 0; i < 100; i++ {
-		currBNode = addNode(uuid.New(), []*point{}, []*backnode{currBNode})
+		currBNode = addEmpty([]*backnode{currBNode})
 		fork2Nodes = append(fork2Nodes, currBNode)
 	}
 	lastFork2 := currBNode
@@ -106,10 +106,10 @@ func TestShouldIgnoreFork(t *testing.T) {
 
 func TestShouldComputeNonTreeGraph(t *testing.T) {
 	firstNode := initNode([]secretsharing.Share{}, uuid.New(), uuid.New())
-	upNode := addNode(uuid.New(), []*point{}, []*backnode{firstNode})
-	downNode := addNode(uuid.New(), []*point{}, []*backnode{firstNode})
-	up2Node := addNode(uuid.New(), []*point{}, []*backnode{upNode, downNode})
-	down2Node := addNode(uuid.New(), []*point{}, []*backnode{upNode, downNode})
+	upNode := addEmpty([]*backnode{firstNode})
+	downNode := addEmpty([]*backnode{firstNode})
+	up2Node := addEmpty([]*backnode{upNode, downNode})
+	down2Node := addEmpty([]*backnode{upNode, downNode})
 	fnode := makeSubgraph([]*backnode{up2Node, down2Node})
 	assert.Equal(t, fnode.id, firstNode.id)
 	assert.Equal(t, 2, len(fnode.next))
@@ -154,16 +154,8 @@ func TestShouldReturnInitialPointsLongChain(t *testing.T) {
 	firstNode := initNode(shares, uuid.New(), id)
 	currBNode := firstNode
 	for i := 0; i < 100; i++ {
-		newPoints := lo.Map(shares, func(s secretsharing.Share, _ int) *point {
-			return &point{
-				owner: id,
-				val: secretsharing.Share{
-					ID:    s.ID,
-					Value: cointoss.NewScalar(0),
-				},
-			}
-		})
-		currBNode = addNode(uuid.New(), newPoints, []*backnode{currBNode})
+		deltaVals := makeSharesVal(len(shares), 0)
+		currBNode = addNode(uuid.New(), deltaVals, []*ownerTransfer{}, []*backnode{currBNode})
 	}
 	fnode := makeSubgraph([]*backnode{currBNode})
 	points := fnode.computeShareState()
@@ -178,25 +170,12 @@ func TestShouldUpdatePointValsInLongChain(t *testing.T) {
 	id, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	numUpdates := 100
-	shares := lo.Map(lo.Range(100), func(i, _ int) secretsharing.Share {
-		return secretsharing.Share{
-			ID:    cointoss.NewScalar(uint64(i)),
-			Value: cointoss.NewScalar(0),
-		}
-	})
+	shares := makeSharesVal(100, 0)
 	firstNode := initNode(shares, uuid.New(), id)
 	currBNode := firstNode
 	for i := 0; i < numUpdates; i++ {
-		newPoints := lo.Map(shares, func(s secretsharing.Share, _ int) *point {
-			return &point{
-				owner: id,
-				val: secretsharing.Share{
-					ID:    s.ID,
-					Value: cointoss.NewScalar(1),
-				},
-			}
-		})
-		currBNode = addNode(uuid.New(), newPoints, []*backnode{currBNode})
+		deltaVals := makeSharesVal(len(shares), 1)
+		currBNode = addNode(uuid.New(), deltaVals, []*ownerTransfer{}, []*backnode{currBNode})
 	}
 	fnode := makeSubgraph([]*backnode{currBNode})
 	points := fnode.computeShareState()
@@ -211,36 +190,17 @@ func TestShouldUpdatePointValsInLongChain(t *testing.T) {
 func TestShouldUpdateOwnersInLongChain(t *testing.T) {
 	numIds := 100
 	ids := lo.Map(lo.Range(numIds), func(_, _ int) uuid.UUID { return uuid.New() })
-	shares := lo.Map(lo.Range(numIds), func(i, _ int) secretsharing.Share {
-		return secretsharing.Share{
-			ID:    cointoss.NewScalar(uint64(i)),
-			Value: cointoss.NewScalar(0),
-		}
-	})
+	shares := makeSharesVal(100, 0)
 	currNode := initNode(shares, uuid.New(), ids[0])
-	for i := 1; i < numIds-1; i++ {
-		newPoints := lo.Map(shares, func(s secretsharing.Share, _ int) *point {
-			return &point{
-				owner: ids[0],
-				val: secretsharing.Share{
-					ID:    s.ID,
-					Value: cointoss.NewScalar(0),
-				},
-			}
-		})
-		currNode = addNode(ids[i], newPoints, []*backnode{currNode})
-	}
-	newPoints := lo.Map(shares, func(s secretsharing.Share, i int) *point {
-		return &point{
-			owner: ids[i],
-			val: secretsharing.Share{
-				ID:    s.ID,
-				Value: cointoss.NewScalar(0),
-			},
+	for i := 1; i < numIds; i++ {
+		deltaVals := makeSharesVal(len(shares), 0)
+		ot := &ownerTransfer{
+			shareIdx: uint(i),
+			owner:    ids[i],
 		}
-	})
-	lastNode := addNode(ids[numIds-1], newPoints, []*backnode{currNode})
-	fnode := makeSubgraph([]*backnode{lastNode})
+		currNode = addNode(ids[i], deltaVals, []*ownerTransfer{ot}, []*backnode{currNode})
+	}
+	fnode := makeSubgraph([]*backnode{currNode})
 	points := fnode.computeShareState()
 	assert.Equal(t, len(ids), len(points))
 	for _, tuple := range lo.Zip2(ids, points) {
@@ -258,36 +218,30 @@ func TestShouldUpdateValsInFork(t *testing.T) {
 		}
 	})
 	firstNode := initNode(shares, uuid.New(), uuid.New())
-	upNode := addNode(uuid.New(), lo.Map(shares, func(s secretsharing.Share, i int) *point {
+	upNode := addNode(uuid.New(), lo.Map(shares, func(s secretsharing.Share, i int) secretsharing.Share {
 		var val group.Scalar
 		if i < numShares/2 {
 			val = cointoss.NewScalar(1)
 		} else {
 			val = cointoss.NewScalar(0)
 		}
-		return &point{
-			owner: firstNode.id,
-			val: secretsharing.Share{
-				ID:    s.ID,
-				Value: val,
-			},
+		return secretsharing.Share{
+			ID:    s.ID,
+			Value: val,
 		}
-	}), []*backnode{firstNode})
-	downNode := addNode(uuid.New(), lo.Map(shares, func(s secretsharing.Share, i int) *point {
+	}), []*ownerTransfer{}, []*backnode{firstNode})
+	downNode := addNode(uuid.New(), lo.Map(shares, func(s secretsharing.Share, i int) secretsharing.Share {
 		var val group.Scalar
 		if i < numShares/2 {
 			val = cointoss.NewScalar(0)
 		} else {
 			val = cointoss.NewScalar(2)
 		}
-		return &point{
-			owner: firstNode.id,
-			val: secretsharing.Share{
-				ID:    s.ID,
-				Value: val,
-			},
+		return secretsharing.Share{
+			ID:    s.ID,
+			Value: val,
 		}
-	}), []*backnode{firstNode})
+	}), []*ownerTransfer{}, []*backnode{firstNode})
 	fnode := makeSubgraph([]*backnode{upNode, downNode})
 	points := fnode.computeShareState()
 	recovVals := lo.Map(points, func(p *point, _ int) group.Scalar { return p.val.Value })
@@ -306,39 +260,22 @@ func TestShouldUpdateOwnersInFork(t *testing.T) {
 	initialId := uuid.New()
 	upId := uuid.New()
 	downId := uuid.New()
-	shares := lo.Map(lo.Range(numShares), func(i, _ int) secretsharing.Share {
-		return secretsharing.Share{
-			ID:    cointoss.NewScalar(uint64(i)),
-			Value: cointoss.NewScalar(0),
+	shares := makeSharesVal(numShares, 0)
+	firstNode := initNode(shares, uuid.New(), initialId)
+	upOT := lo.Map(lo.RangeFrom(numShares/3, numShares/3), func(i, _ int) *ownerTransfer {
+		return &ownerTransfer{
+			shareIdx: uint(i),
+			owner:    upId,
 		}
 	})
-	firstNode := initNode(shares, uuid.New(), initialId)
-	upNode := addNode(uuid.New(), lo.Map(shares, func(s secretsharing.Share, i int) *point {
-		owner := initialId
-		if i >= numShares/3 && i < 2*numShares/3 {
-			owner = upId
+	upNode := addNode(uuid.New(), makeSharesVal(numShares, 0), upOT, []*backnode{firstNode})
+	downOT := lo.Map(lo.RangeFrom(2*numShares/3, numShares/3+1), func(i, _ int) *ownerTransfer {
+		return &ownerTransfer{
+			shareIdx: uint(i),
+			owner:    downId,
 		}
-		return &point{
-			owner: owner,
-			val: secretsharing.Share{
-				ID:    s.ID,
-				Value: cointoss.NewScalar(0),
-			},
-		}
-	}), []*backnode{firstNode})
-	downNode := addNode(uuid.New(), lo.Map(shares, func(s secretsharing.Share, i int) *point {
-		owner := initialId
-		if i >= 2*numShares/3 {
-			owner = downId
-		}
-		return &point{
-			owner: owner,
-			val: secretsharing.Share{
-				ID:    s.ID,
-				Value: cointoss.NewScalar(0),
-			},
-		}
-	}), []*backnode{firstNode})
+	})
+	downNode := addNode(uuid.New(), makeSharesVal(numShares, 0), downOT, []*backnode{firstNode})
 	fnode := makeSubgraph([]*backnode{upNode, downNode})
 	points := fnode.computeShareState()
 	owners := lo.Map(points, func(p *point, _ int) uuid.UUID { return p.owner })
@@ -351,4 +288,17 @@ func TestShouldUpdateOwnersInFork(t *testing.T) {
 			assert.Equal(t, downId, owner)
 		}
 	}
+}
+
+func addEmpty(prev []*backnode) *backnode {
+	return addNode(uuid.New(), []secretsharing.Share{}, []*ownerTransfer{}, prev)
+}
+
+func makeSharesVal(numShares, val int) []secretsharing.Share {
+	return lo.Map(lo.Range(numShares), func(i, _ int) secretsharing.Share {
+		return secretsharing.Share{
+			ID:    cointoss.NewScalar(uint64(i)),
+			Value: cointoss.NewScalar(uint64(val)),
+		}
+	})
 }
