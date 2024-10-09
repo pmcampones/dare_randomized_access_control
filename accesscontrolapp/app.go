@@ -153,7 +153,7 @@ func addBnode(op *Op, app *App, add *AddOp) *backnode {
 }
 
 func (app *App) canAdd(op *Op) (bool, string) {
-	if !lo.EveryBy(op.prevIds, func(prev uuid.UUID) bool { return app.graphNodes[prev] != nil }) {
+	if !app.hasPrevious(op) {
 		return false, "previous operation ids do not exist"
 	}
 	add := op.content.(*AddOp)
@@ -176,6 +176,34 @@ func (app *App) canAdd(op *Op) (bool, string) {
 	return true, ""
 }
 
+func execPost(op *Op, app *App) error {
+	post := op.content.(*PostOp)
+	poster := app.users[post.poster]
+	if !app.hasPrevious(op) {
+		return fmt.Errorf("previous operation ids do not exist")
+	} else if poster == nil {
+		return fmt.Errorf("operation poster is not a user")
+	}
+	msg := Msg{
+		Issuer:  post.poster,
+		Content: post.msg,
+	}
+	app.msgs = append(app.msgs, msg)
+	app.graphNodes[op.id] = postBNode(op, app)
+	return nil
+}
+
+func postBNode(op *Op, app *App) *backnode {
+	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
+	bnode := &backnode{
+		id:             op.id,
+		deltaVals:      []secretsharing.Share{},
+		ownerTransfers: []*ownerTransfer{},
+		prev:           prev,
+	}
+	return bnode
+}
+
 func isConcurrent(opList []*Op, i int) bool {
 	assert.Equal(Rem, opList[i].kind, "First operation must be removal when this method is called")
 	if (i+1) >= len(opList) || opList[i+1].kind != Rem {
@@ -184,15 +212,6 @@ func isConcurrent(opList []*Op, i int) bool {
 	rem1 := opList[i].content.(*RemOp)
 	rem2 := opList[i+1].content.(*RemOp)
 	return rem1.issuer == rem2.removed && rem1.removed == rem2.issuer
-}
-
-func execPost(op *Op, app *App) error {
-	postOp := op.content.(*PostOp)
-	err := app.Post(postOp, op.prevIds)
-	if err != nil {
-		return fmt.Errorf("unable to compute post operation: %v", err)
-	}
-	return nil
 }
 
 func execConcurrent(op1, op2 *Op, seed int64, app *App) error {
@@ -304,19 +323,6 @@ func (app *App) canRemUser(op *RemOp) (bool, string) {
 	return true, ""
 }
 
-func (app *App) Post(op *PostOp, prevIds []uuid.UUID) error {
-	poster := app.users[op.poster]
-	if poster == nil {
-		return fmt.Errorf("operation poster is not a user")
-	}
-	msg := Msg{
-		Issuer:  op.poster,
-		Content: op.msg,
-	}
-	app.msgs = append(app.msgs, msg)
-	return nil
-}
-
 func newUser(id uuid.UUID, points []uint) *User {
 	pts := llrb.New()
 	for _, p := range points {
@@ -326,4 +332,8 @@ func newUser(id uuid.UUID, points []uint) *User {
 		Id:     id,
 		Points: pts,
 	}
+}
+
+func (app *App) hasPrevious(op *Op) bool {
+	return lo.EveryBy(op.prevIds, func(prev uuid.UUID) bool { return app.graphNodes[prev] != nil })
 }

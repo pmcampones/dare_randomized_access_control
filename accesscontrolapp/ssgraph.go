@@ -69,9 +69,11 @@ func (n *forwardnode) updateAccum() {
 	for _, ownerTransfer := range n.ownerTransfers {
 		n.accum.points[ownerTransfer.shareIdx].owner = ownerTransfer.owner
 	}
-	for _, tuple := range lo.Zip2(n.deltaVals, n.accum.points) {
-		val, pt := tuple.Unpack()
-		pt.val.Value = cointoss.AddScalar(pt.val.Value, val.Value)
+	if len(n.deltaVals) > 0 {
+		for _, tuple := range lo.Zip2(n.deltaVals, n.accum.points) {
+			val, pt := tuple.Unpack()
+			pt.val.Value = cointoss.AddScalar(pt.val.Value, val.Value)
+		}
 	}
 }
 
