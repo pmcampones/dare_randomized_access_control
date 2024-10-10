@@ -158,6 +158,8 @@ func (app *App) add(op *Op) error {
 func (app *App) canAdd(op *Op) (bool, string) {
 	if !app.hasPrevious(op) {
 		return false, "previous operation ids do not exist"
+	} else if len(op.prevIds) == 0 {
+		return false, "add operation must have at least one previous operation"
 	}
 	add := op.content.(*AddOp)
 	if add.issuer == add.added {
@@ -196,6 +198,8 @@ func (app *App) post(op *Op) error {
 	app.graphNodes[op.id] = app.postBNode(op)
 	if !app.hasPrevious(op) {
 		return fmt.Errorf("previous operation ids do not exist")
+	} else if len(op.prevIds) == 0 {
+		return fmt.Errorf("post operation must have at least one previous operation")
 	} else if poster == nil {
 		return fmt.Errorf("operation poster is not a user")
 	}
@@ -290,7 +294,11 @@ func (app *App) rem(op *Op) error {
 
 func (app *App) canRemUser(op *Op) (bool, string) {
 	rem := op.content.(*RemOp)
-	if rem.issuer == rem.removed {
+	if !app.hasPrevious(op) {
+		return false, "previous operation ids do not exist"
+	} else if len(op.prevIds) == 0 {
+		return false, "removal operation must have at least one previous operation"
+	} else if rem.issuer == rem.removed {
 		return false, "user cannot remove themselves"
 	}
 	issuer := app.users[rem.issuer]
