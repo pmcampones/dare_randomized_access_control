@@ -26,7 +26,7 @@ func TestShouldHaveInitialNode(t *testing.T) {
 	assert.NoError(t, err)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
 	hashgraph.RunHashgraph(0, firstNode)
-	app, err := ExecuteCRDT(&crdt, 1000, 2)
+	app, err := ExecuteCRDT(&crdt, 100, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, firstId, app.users[firstId].Id)
 	assert.Equal(t, 1, len(app.users))
@@ -41,7 +41,7 @@ func TestShouldRecordMessage(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
 	hashgraph.NewNode(crdt.Post(firstId, msg), []*hashgraph.OpNode{firstNode})
 	hashgraph.RunHashgraph(0, firstNode)
-	app, err := ExecuteCRDT(&crdt, 1000, 2)
+	app, err := ExecuteCRDT(&crdt, 100, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(app.msgs))
 	assert.Equal(t, firstId, app.msgs[0].Issuer)
@@ -56,9 +56,10 @@ func TestShouldAddPeer(t *testing.T) {
 	secondId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
-	hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, 500)), []*hashgraph.OpNode{firstNode})
+	points := 100
+	hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, points/2)), []*hashgraph.OpNode{firstNode})
 	hashgraph.RunHashgraph(0, firstNode)
-	app, err := ExecuteCRDT(&crdt, 1000, 2)
+	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(app.users))
 	assert.Equal(t, firstId, app.users[firstId].Id)
@@ -68,8 +69,8 @@ func TestShouldAddPeer(t *testing.T) {
 func TestShouldGivePointsDuringAdd(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	initialPoints := 1000
-	givenPoints := makePtRange(0, 500)
+	points := 100
+	givenPoints := makePtRange(0, points/2)
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	secondId, err := uuid.NewRandomFromReader(r)
@@ -77,10 +78,10 @@ func TestShouldGivePointsDuringAdd(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
 	hashgraph.NewNode(crdt.Add(firstId, secondId, givenPoints), []*hashgraph.OpNode{firstNode})
 	hashgraph.RunHashgraph(0, firstNode)
-	app, err := ExecuteCRDT(&crdt, initialPoints, 2)
+	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, len(givenPoints), app.users[secondId].Points.Len())
-	assert.Equal(t, initialPoints-len(givenPoints), app.users[firstId].Points.Len())
+	assert.Equal(t, points-len(givenPoints), app.users[firstId].Points.Len())
 }
 
 func TestShouldRemovePeer(t *testing.T) {
@@ -91,10 +92,11 @@ func TestShouldRemovePeer(t *testing.T) {
 	secondId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
-	addNode := hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, 500)), []*hashgraph.OpNode{firstNode})
+	points := 100
+	addNode := hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, points/2)), []*hashgraph.OpNode{firstNode})
 	hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.OpNode{addNode})
 	hashgraph.RunHashgraph(0, firstNode)
-	app, err := ExecuteCRDT(&crdt, 1000, 2)
+	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(app.users))
 	assert.Equal(t, secondId, app.users[secondId].Id)
@@ -103,8 +105,8 @@ func TestShouldRemovePeer(t *testing.T) {
 func TestShouldTakePointsDuringRem(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	initialPoints := 1000
-	givenPoints := makePtRange(0, 500)
+	points := 100
+	givenPoints := makePtRange(0, points/2)
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	secondId, err := uuid.NewRandomFromReader(r)
@@ -113,9 +115,9 @@ func TestShouldTakePointsDuringRem(t *testing.T) {
 	addNode := hashgraph.NewNode(crdt.Add(firstId, secondId, givenPoints), []*hashgraph.OpNode{firstNode})
 	hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.OpNode{addNode})
 	hashgraph.RunHashgraph(0, firstNode)
-	app, err := ExecuteCRDT(&crdt, initialPoints, 2)
+	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, initialPoints, app.users[secondId].Points.Len())
+	assert.Equal(t, points, app.users[secondId].Points.Len())
 }
 
 func TestShouldFailToPostMessageIssuerNotExists(t *testing.T) {
@@ -128,7 +130,7 @@ func TestShouldFailToPostMessageIssuerNotExists(t *testing.T) {
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
 	hashgraph.NewNode(crdt.Post(secondId, "I don't exist yet"), []*hashgraph.OpNode{firstNode})
 	hashgraph.RunHashgraph(0, firstNode)
-	app, err := ExecuteCRDT(&crdt, 1000, 2)
+	app, err := ExecuteCRDT(&crdt, 100, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(app.msgs))
 }
@@ -136,7 +138,7 @@ func TestShouldFailToPostMessageIssuerNotExists(t *testing.T) {
 func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	points := 1000
+	points := 100
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	secondId, err := uuid.NewRandomFromReader(r)
@@ -144,7 +146,7 @@ func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
 	thirdId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
-	hashgraph.NewNode(crdt.Add(secondId, thirdId, makePtRange(0, 500)), []*hashgraph.OpNode{firstNode})
+	hashgraph.NewNode(crdt.Add(secondId, thirdId, makePtRange(0, points/2)), []*hashgraph.OpNode{firstNode})
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
@@ -154,13 +156,13 @@ func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
 func TestShouldFailToAddPeerAlreadyExistsSequential(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	points := 1000
+	points := 100
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	secondId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
-	secondNode := hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, 500)), []*hashgraph.OpNode{firstNode})
+	secondNode := hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, points/2)), []*hashgraph.OpNode{firstNode})
 	hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, 1)), []*hashgraph.OpNode{secondNode})
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, points, 2)
@@ -171,7 +173,7 @@ func TestShouldFailToAddPeerAlreadyExistsSequential(t *testing.T) {
 func TestShouldFailToAddPeerAlreadyExistsConcurrent(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	points := 1000
+	points := 100
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	secondId, err := uuid.NewRandomFromReader(r)
@@ -188,7 +190,7 @@ func TestShouldFailToAddPeerAlreadyExistsConcurrent(t *testing.T) {
 func TestShouldFailToAddPeerLackOfPoints(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	points := makePtRange(0, 1000)
+	points := makePtRange(0, 100)
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
@@ -202,7 +204,7 @@ func TestShouldFailToAddPeerLackOfPoints(t *testing.T) {
 func TestShouldFailToAddPeerCannotAddSelf(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	points := 1000
+	points := 100
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
@@ -216,7 +218,7 @@ func TestShouldFailToAddPeerCannotAddSelf(t *testing.T) {
 func TestShouldFailToAddPeerMustGivePoints(t *testing.T) {
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
-	points := 1000
+	points := 100
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
 	secondId, err := uuid.NewRandomFromReader(r)
@@ -264,7 +266,7 @@ func TestShouldAddUsersConcurrently(t *testing.T) {
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
-	points := 1000
+	points := 100
 	ids := genIds(points-1, r)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
 	for i, id := range ids {
@@ -282,7 +284,7 @@ func TestShouldPostConcurrently(t *testing.T) {
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
 	assert.NoError(t, err)
-	points := 1000
+	points := 100
 	ids := genIds(points-1, r)
 	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
 	for i, id := range ids {
@@ -351,7 +353,7 @@ func TestShouldRemoveLowerDepthFirst(t *testing.T) {
 	hashgraph.NewNode(crdt.Rem(firstId, secondId), []*hashgraph.OpNode{postNode})
 	hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.OpNode{addNode})
 	hashgraph.RunHashgraph(0, firstNode)
-	points := 1001
+	points := 101
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(app.users))
@@ -393,6 +395,85 @@ func TestShouldHandleThreeWayConcurrentRemovals(t *testing.T) {
 	fmt.Println(thirdId)
 	fmt.Println(watcherId)
 	fmt.Println(app.users)
+}
+
+func TestShouldBeAbleToReferenceFailedPost(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	points := 100
+	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
+	failedPost := hashgraph.NewNode(crdt.Post(secondId, "I don't exist"), []*hashgraph.OpNode{firstNode})
+	correctMsg := "I exist"
+	hashgraph.NewNode(crdt.Post(firstId, correctMsg), []*hashgraph.OpNode{failedPost})
+	hashgraph.RunHashgraph(0, firstNode)
+	app, err := ExecuteCRDT(&crdt, points, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.msgs))
+	assert.Equal(t, correctMsg, app.msgs[0].Content)
+}
+
+func TestShouldBeAbleToReferenceFailedAdd(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	points := 100
+	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
+	failedAdd := hashgraph.NewNode(crdt.Add(secondId, firstId, []uint{0}), []*hashgraph.OpNode{firstNode})
+	correctMsg := "I exist"
+	hashgraph.NewNode(crdt.Post(firstId, correctMsg), []*hashgraph.OpNode{failedAdd})
+	hashgraph.RunHashgraph(0, firstNode)
+	app, err := ExecuteCRDT(&crdt, points, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.msgs))
+	assert.Equal(t, correctMsg, app.msgs[0].Content)
+}
+
+func TestShouldBeAbleToReferenceFailedRem(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	points := 100
+	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
+	failedRem := hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.OpNode{firstNode})
+	correctMsg := "I exist"
+	hashgraph.NewNode(crdt.Post(firstId, correctMsg), []*hashgraph.OpNode{failedRem})
+	hashgraph.RunHashgraph(0, firstNode)
+	app, err := ExecuteCRDT(&crdt, points, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.msgs))
+	assert.Equal(t, correctMsg, app.msgs[0].Content)
+}
+
+func TestShouldBeAbleToReferenceFailedConcurrentRem(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	thirdId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	points := 100
+	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
+	failedRem1 := hashgraph.NewNode(crdt.Rem(secondId, thirdId), []*hashgraph.OpNode{firstNode})
+	failedRem2 := hashgraph.NewNode(crdt.Rem(thirdId, secondId), []*hashgraph.OpNode{firstNode})
+	correctMsg := "I exist"
+	hashgraph.NewNode(crdt.Post(firstId, correctMsg), []*hashgraph.OpNode{failedRem1, failedRem2})
+	hashgraph.RunHashgraph(0, firstNode)
+	app, err := ExecuteCRDT(&crdt, points, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.msgs))
+	assert.Equal(t, correctMsg, app.msgs[0].Content)
 }
 
 func makePtRange(start, end int) []uint {
