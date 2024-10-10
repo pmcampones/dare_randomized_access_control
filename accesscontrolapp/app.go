@@ -215,9 +215,7 @@ func isConcurrent(opList []*Op, i int) bool {
 }
 
 func execConcurrent(op1, op2 *Op, seed int64, app *App) error {
-	rem1 := op1.content.(*RemOp)
-	rem2 := op2.content.(*RemOp)
-	canRem, reason := app.canRemUser(rem1)
+	canRem, reason := app.canRemUser(op1)
 	if !canRem {
 		return fmt.Errorf(reason)
 	}
@@ -225,21 +223,61 @@ func execConcurrent(op1, op2 *Op, seed int64, app *App) error {
 	if err != nil {
 		return fmt.Errorf("unable to compute coin toss: %v", err)
 	}
-	threshold := app.computeThreshold(rem1)
+	threshold := app.computeThreshold(op1)
 	if coin < threshold {
-		return app.RemUser(rem1, op1.prevIds)
+		if err = execRem(op1, app); err != nil {
+			return err
+		}
+		app.graphNodes[op2.id] = dummyBNode(op2, app)
 	} else {
-		return app.RemUser(rem2, op2.prevIds)
+		if err = execRem(op2, app); err != nil {
+			return err
+		}
+		app.graphNodes[op1.id] = dummyBNode(op1, app)
+	}
+	return nil
+}
+
+func dummyBNode(op *Op, app *App) *backnode {
+	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
+	return &backnode{
+		id:             op.id,
+		deltaVals:      []secretsharing.Share{},
+		ownerTransfers: []*ownerTransfer{},
+		prev:           prev,
 	}
 }
 
 func execRem(op *Op, app *App) error {
-	remOp := op.content.(*RemOp)
-	err := app.RemUser(remOp, op.prevIds)
-	if err != nil {
-		return fmt.Errorf("unable to compute remove operation: %v", err)
+	rem := op.content.(*RemOp)
+	canRem, reason := app.canRemUser(op)
+	if !canRem {
+		return fmt.Errorf(reason)
 	}
+	issuer := app.users[rem.issuer]
+	removed := app.users[rem.removed]
+	assert.True(areSetsDisjoint(issuer.Points, removed.Points), "points must be disjoint")
+	transferPoints(removed.Points, issuer.Points)
+	app.graphNodes[op.id] = remBNode(op, app)
+	delete(app.users, rem.removed)
 	return nil
+}
+
+func remBNode(op *Op, app *App) *backnode {
+	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
+	rem := op.content.(*RemOp)
+	ot := make([]*ownerTransfer, 0)
+	removed := app.users[rem.removed]
+	removed.Points.AscendGreaterOrEqual(removed.Points.Min(), func(val llrb.Item) bool {
+		ot = append(ot, &ownerTransfer{shareIdx: uint(val.(*pt).pt), owner: rem.issuer})
+		return true
+	})
+	return &backnode{
+		id:             op.id,
+		deltaVals:      cointoss.ShareRandomSecret(uint(app.threshold), uint(app.numPoints)),
+		ownerTransfers: ot,
+		prev:           prev,
+	}
 }
 
 func (app *App) initialBacknode(id, owner uuid.UUID, points int) *backnode {
@@ -255,9 +293,10 @@ func (app *App) initialBacknode(id, owner uuid.UUID, points int) *backnode {
 	}
 }
 
-func (app *App) computeThreshold(rem1 *RemOp) float64 {
-	issuer := app.users[rem1.issuer]
-	removed := app.users[rem1.removed]
+func (app *App) computeThreshold(op *Op) float64 {
+	rem := op.content.(*RemOp)
+	issuer := app.users[rem.issuer]
+	removed := app.users[rem.removed]
 	issuerPoints := issuer.Points.Len()
 	totalPoints := issuerPoints + removed.Points.Len()
 	threshold := float64(issuerPoints) / float64(totalPoints)
@@ -275,19 +314,6 @@ func computeCoinToss(seed int64, secret secretsharing.Share) (float64, error) {
 		return 0, fmt.Errorf("unable to hash secret point to number: %v", err)
 	}
 	return coin, nil
-}
-
-func (app *App) RemUser(op *RemOp, prevIds []uuid.UUID) error {
-	canRem, reason := app.canRemUser(op)
-	if !canRem {
-		return fmt.Errorf(reason)
-	}
-	issuer := app.users[op.issuer]
-	removed := app.users[op.removed]
-	assert.True(areSetsDisjoint(issuer.Points, removed.Points), "points must be disjoint")
-	transferPoints(removed.Points, issuer.Points)
-	delete(app.users, op.removed)
-	return nil
 }
 
 func transferPoints(from, to *llrb.LLRB) {
@@ -309,12 +335,14 @@ func areSetsDisjoint(a, b *llrb.LLRB) bool {
 	return disjoint
 }
 
-func (app *App) canRemUser(op *RemOp) (bool, string) {
-	if op.issuer == op.removed {
+func (app *App) canRemUser(op *Op) (bool, string) {
+
+	rem := op.content.(*RemOp)
+	if rem.issuer == rem.removed {
 		return false, "user cannot remove themselves"
 	}
-	issuer := app.users[op.issuer]
-	removed := app.users[op.removed]
+	issuer := app.users[rem.issuer]
+	removed := app.users[rem.removed]
 	if issuer == nil {
 		return false, "operation issuer is not a user"
 	} else if removed == nil {
