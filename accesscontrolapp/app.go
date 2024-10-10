@@ -141,6 +141,7 @@ func (app *App) initialBacknode(id, owner uuid.UUID, points int) *backnode {
 func (app *App) add(op *Op) error {
 	add := op.content.(*AddOp)
 	if canAdd, reason := app.canAdd(op); !canAdd {
+		app.graphNodes[op.id] = app.dummyBNode(op)
 		return fmt.Errorf(reason)
 	}
 	issuer := app.users[add.issuer]
@@ -150,6 +151,7 @@ func (app *App) add(op *Op) error {
 	added := newUser(add.added, add.points)
 	app.users[add.added] = added
 	app.graphNodes[op.id] = app.addBnode(op, add)
+	slog.Debug("Added user", "issuer", add.issuer, "added", add.added, "points", len(add.points))
 	return nil
 }
 
@@ -191,6 +193,7 @@ func (app *App) addBnode(op *Op, add *AddOp) *backnode {
 func (app *App) post(op *Op) error {
 	post := op.content.(*PostOp)
 	poster := app.users[post.poster]
+	app.graphNodes[op.id] = app.postBNode(op)
 	if !app.hasPrevious(op) {
 		return fmt.Errorf("previous operation ids do not exist")
 	} else if poster == nil {
@@ -201,7 +204,7 @@ func (app *App) post(op *Op) error {
 		Content: post.msg,
 	}
 	app.msgs = append(app.msgs, msg)
-	app.graphNodes[op.id] = app.postBNode(op)
+	slog.Debug("Posted message", "poster", post.poster, "msg", post.msg)
 	return nil
 }
 
@@ -229,12 +232,14 @@ func isConcurrent(opList []*Op, i int) bool {
 func (app *App) concurrentRem(op1, op2 *Op, seed int64) error {
 	canRem, reason := app.canRemUser(op1)
 	if !canRem {
+		app.graphNodes[op1.id] = app.dummyBNode(op1)
 		return fmt.Errorf(reason)
 	} else if !app.hasPrevious(op2) {
 		if err := app.rem(op1); err != nil {
 			return err
 		}
 		app.graphNodes[op2.id] = app.dummyBNode(op2)
+		return nil
 	}
 	allPrev := lo.Map(append(op1.prevIds, op2.prevIds...), func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
 	coin, err := computeCoinToss(seed, allPrev)
@@ -270,6 +275,7 @@ func (app *App) rem(op *Op) error {
 	rem := op.content.(*RemOp)
 	canRem, reason := app.canRemUser(op)
 	if !canRem {
+		app.graphNodes[op.id] = app.dummyBNode(op)
 		return fmt.Errorf(reason)
 	}
 	issuer := app.users[rem.issuer]
@@ -278,6 +284,7 @@ func (app *App) rem(op *Op) error {
 	transferPoints(removed.Points, issuer.Points)
 	app.graphNodes[op.id] = app.remBNode(op)
 	delete(app.users, rem.removed)
+	slog.Debug("Removed user", "issuer", rem.issuer, "removed", rem.removed)
 	return nil
 }
 

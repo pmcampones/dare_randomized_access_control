@@ -2,9 +2,11 @@ package accesscontrolapp
 
 import (
 	"dare_randomized_access_control/hashgraph"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
+	"log/slog"
 	"math/rand"
 	"testing"
 )
@@ -334,6 +336,63 @@ func TestShouldRemoveConflictingConcurrently(t *testing.T) {
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(app.users))
+}
+
+func TestShouldRemoveLowerDepthFirst(t *testing.T) {
+	r := rand.New(rand.NewSource(int64(0)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
+	addNode := hashgraph.NewNode(crdt.Add(firstId, secondId, []uint{0}), []*hashgraph.OpNode{firstNode})
+	postNode := hashgraph.NewNode(crdt.Post(firstId, "placeholder"), []*hashgraph.OpNode{addNode})
+	hashgraph.NewNode(crdt.Rem(firstId, secondId), []*hashgraph.OpNode{postNode})
+	hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.OpNode{addNode})
+	hashgraph.RunHashgraph(0, firstNode)
+	points := 1001
+	app, err := ExecuteCRDT(&crdt, points, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(app.users))
+	assert.NotEqual(t, nil, app.users[secondId])
+	assert.Equal(t, points, app.users[secondId].Points.Len())
+}
+
+func TestShouldHandleThreeWayConcurrentRemovals(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+	//A removes B, B removes C, and C removes A. D observes the result
+	r := rand.New(rand.NewSource(int64(25)))
+	crdt := NewCRDT()
+	firstId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	secondId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	thirdId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	watcherId, err := uuid.NewRandomFromReader(r)
+	assert.NoError(t, err)
+	points := 101
+	firstNode := hashgraph.NewNode(crdt.Init(firstId), nil)
+	add1Node := hashgraph.NewNode(crdt.Add(firstId, secondId, makePtRange(0, points/3)), []*hashgraph.OpNode{firstNode})
+	add2Node := hashgraph.NewNode(crdt.Add(firstId, thirdId, makePtRange(points/3, 2*points/3)), []*hashgraph.OpNode{add1Node})
+	add3Node := hashgraph.NewNode(crdt.Add(firstId, watcherId, []uint{uint(points - 1)}), []*hashgraph.OpNode{add2Node})
+	remAB := hashgraph.NewNode(crdt.Rem(firstId, secondId), []*hashgraph.OpNode{add3Node})
+	remBA := hashgraph.NewNode(crdt.Rem(secondId, firstId), []*hashgraph.OpNode{add3Node})
+	remBC := hashgraph.NewNode(crdt.Rem(secondId, thirdId), []*hashgraph.OpNode{add3Node})
+	remCB := hashgraph.NewNode(crdt.Rem(thirdId, secondId), []*hashgraph.OpNode{add3Node})
+	remAC := hashgraph.NewNode(crdt.Rem(firstId, thirdId), []*hashgraph.OpNode{add3Node})
+	remCA := hashgraph.NewNode(crdt.Rem(thirdId, firstId), []*hashgraph.OpNode{add3Node})
+	hashgraph.NewNode(crdt.Post(watcherId, "placeholder"), []*hashgraph.OpNode{remAB, remBA, remBC, remCB, remAC, remCA})
+	hashgraph.RunHashgraph(0, firstNode)
+	app, err := ExecuteCRDT(&crdt, points, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(app.users))
+	fmt.Println(firstId)
+	fmt.Println(secondId)
+	fmt.Println(thirdId)
+	fmt.Println(watcherId)
+	fmt.Println(app.users)
 }
 
 func makePtRange(start, end int) []uint {
