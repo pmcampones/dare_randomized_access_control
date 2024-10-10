@@ -23,8 +23,9 @@ type Msg struct {
 }
 
 type User struct {
-	Id     uuid.UUID
-	Points *llrb.LLRB
+	Id         uuid.UUID
+	Points     *llrb.LLRB
+	prettyName string
 }
 
 type pt struct {
@@ -118,7 +119,7 @@ func (app *App) init(op *Op) error {
 		pts.InsertNoReplace(&pt{pt: p})
 	}
 	points := lo.Map(lo.Range(app.numPoints), func(p int, _ int) uint { return uint(p) })
-	user := newUser(init.initial, points)
+	user := newUser(init.initial, init.prettyName, points)
 	bnode := app.initialBacknode(op.id, init.initial, app.numPoints)
 	app.graphNodes[bnode.id] = bnode
 	app.users[init.initial] = user
@@ -148,7 +149,7 @@ func (app *App) add(op *Op) error {
 	for _, p := range add.points {
 		issuer.Points.Delete(&pt{pt: int(p)})
 	}
-	added := newUser(add.added, add.points)
+	added := newUser(add.added, add.prettyName, add.points)
 	app.users[add.added] = added
 	app.graphNodes[op.id] = app.addBnode(op, add)
 	slog.Debug("Added user", "issuer", add.issuer, "added", add.added, "points", len(add.points))
@@ -379,14 +380,15 @@ func areSetsDisjoint(a, b *llrb.LLRB) bool {
 	return disjoint
 }
 
-func newUser(id uuid.UUID, points []uint) *User {
+func newUser(id uuid.UUID, name string, points []uint) *User {
 	pts := llrb.New()
 	for _, p := range points {
 		pts.InsertNoReplace(&pt{pt: int(p)})
 	}
 	return &User{
-		Id:     id,
-		Points: pts,
+		Id:         id,
+		Points:     pts,
+		prettyName: name,
 	}
 }
 

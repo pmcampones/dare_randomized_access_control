@@ -50,7 +50,7 @@ func genOperations(maxDepth int, ids []uuid.UUID, repetitions int, r *rand.Rand,
 			added := ids[r.Intn(len(ids))]
 			points := lo.Map(lo.Range(r.Intn(1000)), func(i int, _ int) uint { return uint(i) })
 			exec := func() error {
-				return crdt.Add(issuer, added, points)(d, uuid.New(), []uuid.UUID{})
+				return crdt.Add(issuer, added, "", points)(d, uuid.New(), []uuid.UUID{})
 			}
 			ops = append(ops, exec)
 		}
@@ -112,7 +112,7 @@ func addRandom(t *testing.T, r *rand.Rand, crdt CRDT) func() error {
 	assert.NoError(t, err)
 	points := lo.Map(lo.Range(r.Intn(1000)), func(i int, _ int) uint { return uint(i) })
 	return func() error {
-		return crdt.Add(issuer, added, points)(0, uuid.New(), []uuid.UUID{})
+		return crdt.Add(issuer, added, "", points)(0, uuid.New(), []uuid.UUID{})
 	}
 }
 

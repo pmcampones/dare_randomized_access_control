@@ -38,7 +38,8 @@ type Op struct {
 }
 
 type InitOp struct {
-	initial UUID
+	initial    UUID
+	prettyName string
 }
 
 type PostOp struct {
@@ -47,9 +48,10 @@ type PostOp struct {
 }
 
 type AddOp struct {
-	issuer UUID
-	added  UUID
-	points []uint
+	issuer     UUID
+	added      UUID
+	points     []uint
+	prettyName string
 }
 
 type RemOp struct {
@@ -74,9 +76,10 @@ func NewCRDT() CRDT {
 	return CRDT{tree: llrb.New()}
 }
 
-func (crdt CRDT) Init(firstParticipant UUID) func(depth int, id UUID, prevIds []UUID) error {
+func (crdt CRDT) Init(firstParticipant UUID, prettyName string) func(depth int, id UUID, prevIds []UUID) error {
 	init := &InitOp{
-		initial: firstParticipant,
+		initial:    firstParticipant,
+		prettyName: prettyName,
 	}
 	op := &Op{
 		idx:     0,
@@ -132,11 +135,12 @@ func (crdt CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, erro
 	return idx, nil
 }
 
-func (crdt CRDT) Add(issuer, added UUID, points []uint) func(depth int, id UUID, prevIds []UUID) error {
+func (crdt CRDT) Add(issuer, added UUID, prettyName string, points []uint) func(depth int, id UUID, prevIds []UUID) error {
 	add := &AddOp{
-		issuer: issuer,
-		added:  added,
-		points: points,
+		issuer:     issuer,
+		added:      added,
+		points:     points,
+		prettyName: prettyName,
 	}
 	return func(depth int, id UUID, prevIds []UUID) error {
 		idx, err := crdt.computeAddIdx(depth, issuer, added, points)
