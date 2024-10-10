@@ -44,13 +44,17 @@ type App struct {
 	numPoints  int
 	threshold  int
 	users      map[uuid.UUID]*User
-	msgs       []Msg
+	Msgs       []Msg
 	graphNodes map[uuid.UUID]*backnode
 }
 
 func ExecuteCRDT(crdt *CRDT, numPoints, threshold int) (*App, error) {
-	app := NewApp(numPoints, threshold)
 	opList := crdt.GetOperationList()
+	return ExecuteOpList(opList, numPoints, threshold)
+}
+
+func ExecuteOpList(opList []*Op, numPoints int, threshold int) (*App, error) {
+	app := NewApp(numPoints, threshold)
 	i := 0
 	for i < len(opList) {
 		op := opList[i]
@@ -107,7 +111,7 @@ func NewApp(numPoints, threshold int) *App {
 		numPoints:  numPoints,
 		threshold:  threshold,
 		users:      make(map[uuid.UUID]*User),
-		msgs:       make([]Msg, 0),
+		Msgs:       make([]Msg, 0),
 		graphNodes: make(map[uuid.UUID]*backnode),
 	}
 }
@@ -127,7 +131,7 @@ func (app *App) init(op *Op) error {
 	app.graphNodes[bnode.id] = bnode
 	app.users[init.initial] = user
 	if LOG_MEMBERSHIP_CHANGES {
-		app.msgs = append(app.msgs, Msg{Issuer: init.initial, Content: fmt.Sprintf("%s created group with %d points", user.prettyName, app.numPoints)})
+		app.Msgs = append(app.Msgs, Msg{Issuer: init.initial, Content: fmt.Sprintf("%s created group with %d points", user.prettyName, app.numPoints)})
 	}
 	return nil
 }
@@ -160,7 +164,7 @@ func (app *App) add(op *Op) error {
 	app.graphNodes[op.id] = app.addBnode(op, add)
 	slog.Debug("Added user", "issuer", add.issuer, "added", add.added, "points", len(add.points))
 	if LOG_MEMBERSHIP_CHANGES {
-		app.msgs = append(app.msgs, Msg{Issuer: add.issuer, Content: fmt.Sprintf("%s added %s with %d points", issuer.prettyName, added.prettyName, len(add.points))})
+		app.Msgs = append(app.Msgs, Msg{Issuer: add.issuer, Content: fmt.Sprintf("%s added %s with %d points", issuer.prettyName, added.prettyName, len(add.points))})
 	}
 	return nil
 }
@@ -217,7 +221,7 @@ func (app *App) post(op *Op) error {
 		Issuer:  post.poster,
 		Content: post.msg,
 	}
-	app.msgs = append(app.msgs, msg)
+	app.Msgs = append(app.Msgs, msg)
 	slog.Debug("Posted message", "poster", post.poster, "msg", post.msg)
 	return nil
 }
@@ -300,7 +304,7 @@ func (app *App) rem(op *Op) error {
 	delete(app.users, rem.removed)
 	slog.Debug("Removed user", "issuer", rem.issuer, "removed", rem.removed)
 	if LOG_MEMBERSHIP_CHANGES {
-		app.msgs = append(app.msgs, Msg{Issuer: rem.issuer, Content: fmt.Sprintf("%s removed %s", issuer.prettyName, removed.prettyName)})
+		app.Msgs = append(app.Msgs, Msg{Issuer: rem.issuer, Content: fmt.Sprintf("%s removed %s", issuer.prettyName, removed.prettyName)})
 	}
 	return nil
 }

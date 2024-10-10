@@ -16,7 +16,7 @@ func TestShouldStartEmpty(t *testing.T) {
 	app, err := ExecuteCRDT(&crdt, 10, 2)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(app.users))
-	assert.Equal(t, 0, len(app.msgs))
+	assert.Equal(t, 0, len(app.Msgs))
 }
 
 func TestShouldHaveInitialNode(t *testing.T) {
@@ -43,9 +43,9 @@ func TestShouldRecordMessage(t *testing.T) {
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, 100, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(app.msgs))
-	assert.Equal(t, firstId, app.msgs[0].Issuer)
-	assert.Equal(t, msg, app.msgs[0].Content)
+	assert.Equal(t, 1, len(app.Msgs))
+	assert.Equal(t, firstId, app.Msgs[0].Issuer)
+	assert.Equal(t, msg, app.Msgs[0].Content)
 }
 
 func TestShouldAddPeer(t *testing.T) {
@@ -132,7 +132,7 @@ func TestShouldFailToPostMessageIssuerNotExists(t *testing.T) {
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, 100, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, 0, len(app.msgs))
+	assert.Equal(t, 0, len(app.Msgs))
 }
 
 func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
@@ -294,7 +294,7 @@ func TestShouldPostConcurrently(t *testing.T) {
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, len(ids), len(app.msgs))
+	assert.Equal(t, len(ids), len(app.Msgs))
 }
 
 func TestShouldRemoveNonConflictingConcurrently(t *testing.T) {
@@ -412,8 +412,8 @@ func TestShouldBeAbleToReferenceFailedPost(t *testing.T) {
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(app.msgs))
-	assert.Equal(t, correctMsg, app.msgs[0].Content)
+	assert.Equal(t, 1, len(app.Msgs))
+	assert.Equal(t, correctMsg, app.Msgs[0].Content)
 }
 
 func TestShouldBeAbleToReferenceFailedAdd(t *testing.T) {
@@ -431,8 +431,8 @@ func TestShouldBeAbleToReferenceFailedAdd(t *testing.T) {
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(app.msgs))
-	assert.Equal(t, correctMsg, app.msgs[0].Content)
+	assert.Equal(t, 1, len(app.Msgs))
+	assert.Equal(t, correctMsg, app.Msgs[0].Content)
 }
 
 func TestShouldBeAbleToReferenceFailedRem(t *testing.T) {
@@ -450,8 +450,8 @@ func TestShouldBeAbleToReferenceFailedRem(t *testing.T) {
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(app.msgs))
-	assert.Equal(t, correctMsg, app.msgs[0].Content)
+	assert.Equal(t, 1, len(app.Msgs))
+	assert.Equal(t, correctMsg, app.Msgs[0].Content)
 }
 
 func TestShouldBeAbleToReferenceFailedConcurrentRem(t *testing.T) {
@@ -472,8 +472,8 @@ func TestShouldBeAbleToReferenceFailedConcurrentRem(t *testing.T) {
 	hashgraph.RunHashgraph(0, firstNode)
 	app, err := ExecuteCRDT(&crdt, points, 2)
 	assert.NoError(t, err)
-	assert.Equal(t, 1, len(app.msgs))
-	assert.Equal(t, correctMsg, app.msgs[0].Content)
+	assert.Equal(t, 1, len(app.Msgs))
+	assert.Equal(t, correctMsg, app.Msgs[0].Content)
 }
 
 func makePtRange(start, end int) []uint {

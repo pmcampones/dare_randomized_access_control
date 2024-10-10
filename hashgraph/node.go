@@ -4,6 +4,7 @@ import (
 	. "github.com/google/uuid"
 	"github.com/negrel/assert"
 	"github.com/samber/lo"
+	"log/slog"
 	"maps"
 	"math/rand"
 	"slices"
@@ -72,7 +73,7 @@ func RunHashgraph(seed int, n Node) {
 		curr := scheduleOrder[0]
 		err := curr.ExecFunc()
 		if err != nil {
-			panic(err)
+			slog.Error("Error executing operation", "err", err)
 		}
 		executed[curr.GetId()] = true
 		nxt := make([]Node, 0, len(curr.GetNext()))

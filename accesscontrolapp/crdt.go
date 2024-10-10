@@ -76,7 +76,7 @@ func NewCRDT() CRDT {
 	return CRDT{tree: llrb.New()}
 }
 
-func (crdt CRDT) Init(firstParticipant UUID, prettyName string) func(depth int, id UUID, prevIds []UUID) error {
+func (crdt *CRDT) Init(firstParticipant UUID, prettyName string) func(depth int, id UUID, prevIds []UUID) error {
 	init := &InitOp{
 		initial:    firstParticipant,
 		prettyName: prettyName,
@@ -96,7 +96,7 @@ func (crdt CRDT) Init(firstParticipant UUID, prettyName string) func(depth int, 
 	}
 }
 
-func (crdt CRDT) Post(poster UUID, msg string) func(depth int, id UUID, prevIds []UUID) error {
+func (crdt *CRDT) Post(poster UUID, msg string) func(depth int, id UUID, prevIds []UUID) error {
 	post := &PostOp{
 		poster: poster,
 		msg:    msg,
@@ -120,7 +120,7 @@ func (crdt CRDT) Post(poster UUID, msg string) func(depth int, id UUID, prevIds 
 	}
 }
 
-func (crdt CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, error) {
+func (crdt *CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, error) {
 	var idx int64
 	idx = int64(depth << (u32Bits + opOffsetSize))
 	idx += int64(int(PostOffset) << u32Bits)
@@ -135,7 +135,7 @@ func (crdt CRDT) computePostIdx(depth int, poster UUID, msg string) (int64, erro
 	return idx, nil
 }
 
-func (crdt CRDT) Add(issuer, added UUID, prettyName string, points []uint) func(depth int, id UUID, prevIds []UUID) error {
+func (crdt *CRDT) Add(issuer, added UUID, prettyName string, points []uint) func(depth int, id UUID, prevIds []UUID) error {
 	add := &AddOp{
 		issuer:     issuer,
 		added:      added,
@@ -161,7 +161,7 @@ func (crdt CRDT) Add(issuer, added UUID, prettyName string, points []uint) func(
 	}
 }
 
-func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points []uint) (int64, error) {
+func (crdt *CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points []uint) (int64, error) {
 	var idx int64
 	idx = int64(depth << (u32Bits + opOffsetSize))
 	idx += int64(int(AddOffset) << u32Bits)
@@ -181,7 +181,7 @@ func (crdt CRDT) computeAddIdx(depth int, issuer UUID, added UUID, points []uint
 	return idx, nil
 }
 
-func (crdt CRDT) Rem(issuer, removed UUID) func(depth int, id UUID, prevIds []UUID) error {
+func (crdt *CRDT) Rem(issuer, removed UUID) func(depth int, id UUID, prevIds []UUID) error {
 	rem := &RemOp{
 		issuer:  issuer,
 		removed: removed,
@@ -205,7 +205,7 @@ func (crdt CRDT) Rem(issuer, removed UUID) func(depth int, id UUID, prevIds []UU
 	}
 }
 
-func (crdt CRDT) computeRemIdx(depth int, issuer UUID, removed UUID) (int64, error) {
+func (crdt *CRDT) computeRemIdx(depth int, issuer UUID, removed UUID) (int64, error) {
 	var idx int64
 	idx = int64(depth << (u32Bits + opOffsetSize))
 	idx += int64(int(RemOffset) << u32Bits)
@@ -236,7 +236,7 @@ func (crdt CRDT) computeRemIdx(depth int, issuer UUID, removed UUID) (int64, err
 	return idx, nil
 }
 
-func (crdt CRDT) GetOperationList() []*Op {
+func (crdt *CRDT) GetOperationList() []*Op {
 	result := make([]*Op, 0, crdt.tree.Len())
 	smallestOp := &Op{idx: -1}
 	crdt.tree.AscendGreaterOrEqual(smallestOp, func(i llrb.Item) bool {
@@ -244,6 +244,10 @@ func (crdt CRDT) GetOperationList() []*Op {
 		return true
 	})
 	return result
+}
+
+func (crdt *CRDT) Clear() {
+	crdt.tree = llrb.New()
 }
 
 func hashToInt(b []byte) uint32 {
