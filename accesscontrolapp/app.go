@@ -52,20 +52,20 @@ func ExecuteCRDT(crdt *CRDT, numPoints, threshold int) (*App, error) {
 		op := opList[i]
 		switch op.kind {
 		case Init:
-			err := execInit(op, app)
+			err := app.init(op)
 			if err != nil {
 				return app, err
 			}
 			i++
 		case Add:
-			err := execAdd(op, app)
+			err := app.add(op)
 			if err != nil {
 				slog.Warn("Unable to compute add operation", "err", err, "idx", op.idx, "op", op.content.(*AddOp))
 			}
 			i++
 		case Rem:
 			if isConcurrent(opList, i) {
-				err := execConcurrent(op, opList[i+1], op.idx, app)
+				err := app.concurrentRem(op, opList[i+1], op.idx)
 				if err != nil {
 					slog.Warn("Unable to compute concurrent removal operation", "err", err, "idx", op.idx, "op", op.content.(*RemOp))
 					i++
@@ -73,14 +73,14 @@ func ExecuteCRDT(crdt *CRDT, numPoints, threshold int) (*App, error) {
 					i += 2
 				}
 			} else {
-				err := execRem(op, app)
+				err := app.rem(op)
 				if err != nil {
 					slog.Warn("Unable to compute removal operation", "err", err, "idx", op.idx, "op", op.content.(*RemOp))
 				}
 				i++
 			}
 		case Post:
-			err := execPost(op, app)
+			err := app.post(op)
 			if err != nil {
 				slog.Warn("Unable to compute post operation", "err", err, "idx", op.idx, "op", op.content.(*PostOp))
 			}
@@ -108,7 +108,7 @@ func NewApp(numPoints, threshold int) *App {
 	}
 }
 
-func execInit(op *Op, app *App) error {
+func (app *App) init(op *Op) error {
 	if len(app.users) != 0 {
 		return fmt.Errorf("already initialized")
 	}
@@ -125,7 +125,20 @@ func execInit(op *Op, app *App) error {
 	return nil
 }
 
-func execAdd(op *Op, app *App) error {
+func (app *App) initialBacknode(id, owner uuid.UUID, points int) *backnode {
+	shares := cointoss.ShareRandomSecret(uint(app.threshold), uint(points))
+	ot := lo.Map(shares, func(_ secretsharing.Share, i int) *ownerTransfer {
+		return &ownerTransfer{shareIdx: uint(i), owner: owner}
+	})
+	return &backnode{
+		id:             id,
+		deltaVals:      shares,
+		ownerTransfers: ot,
+		prev:           []*backnode{},
+	}
+}
+
+func (app *App) add(op *Op) error {
 	add := op.content.(*AddOp)
 	if canAdd, reason := app.canAdd(op); !canAdd {
 		return fmt.Errorf(reason)
@@ -136,20 +149,8 @@ func execAdd(op *Op, app *App) error {
 	}
 	added := newUser(add.added, add.points)
 	app.users[add.added] = added
-	app.graphNodes[op.id] = addBnode(op, app, add)
+	app.graphNodes[op.id] = app.addBnode(op, add)
 	return nil
-}
-
-func addBnode(op *Op, app *App, add *AddOp) *backnode {
-	ot := lo.Map(add.points, func(p uint, _ int) *ownerTransfer { return &ownerTransfer{shareIdx: p, owner: add.added} })
-	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
-	bnode := &backnode{
-		id:             op.id,
-		deltaVals:      cointoss.ShareRandomSecret(uint(app.threshold), uint(app.numPoints)),
-		ownerTransfers: ot,
-		prev:           prev,
-	}
-	return bnode
 }
 
 func (app *App) canAdd(op *Op) (bool, string) {
@@ -176,7 +177,18 @@ func (app *App) canAdd(op *Op) (bool, string) {
 	return true, ""
 }
 
-func execPost(op *Op, app *App) error {
+func (app *App) addBnode(op *Op, add *AddOp) *backnode {
+	ot := lo.Map(add.points, func(p uint, _ int) *ownerTransfer { return &ownerTransfer{shareIdx: p, owner: add.added} })
+	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
+	return &backnode{
+		id:             op.id,
+		deltaVals:      cointoss.ShareRandomSecret(uint(app.threshold), uint(app.numPoints)),
+		ownerTransfers: ot,
+		prev:           prev,
+	}
+}
+
+func (app *App) post(op *Op) error {
 	post := op.content.(*PostOp)
 	poster := app.users[post.poster]
 	if !app.hasPrevious(op) {
@@ -189,11 +201,11 @@ func execPost(op *Op, app *App) error {
 		Content: post.msg,
 	}
 	app.msgs = append(app.msgs, msg)
-	app.graphNodes[op.id] = postBNode(op, app)
+	app.graphNodes[op.id] = app.postBNode(op)
 	return nil
 }
 
-func postBNode(op *Op, app *App) *backnode {
+func (app *App) postBNode(op *Op) *backnode {
 	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
 	bnode := &backnode{
 		id:             op.id,
@@ -214,7 +226,7 @@ func isConcurrent(opList []*Op, i int) bool {
 	return rem1.issuer == rem2.removed && rem1.removed == rem2.issuer
 }
 
-func execConcurrent(op1, op2 *Op, seed int64, app *App) error {
+func (app *App) concurrentRem(op1, op2 *Op, seed int64) error {
 	canRem, reason := app.canRemUser(op1)
 	if !canRem {
 		return fmt.Errorf(reason)
@@ -225,20 +237,20 @@ func execConcurrent(op1, op2 *Op, seed int64, app *App) error {
 	}
 	threshold := app.computeThreshold(op1)
 	if coin < threshold {
-		if err = execRem(op1, app); err != nil {
+		if err = app.rem(op1); err != nil {
 			return err
 		}
-		app.graphNodes[op2.id] = dummyBNode(op2, app)
+		app.graphNodes[op2.id] = app.dummyBNode(op2)
 	} else {
-		if err = execRem(op2, app); err != nil {
+		if err = app.rem(op2); err != nil {
 			return err
 		}
-		app.graphNodes[op1.id] = dummyBNode(op1, app)
+		app.graphNodes[op1.id] = app.dummyBNode(op1)
 	}
 	return nil
 }
 
-func dummyBNode(op *Op, app *App) *backnode {
+func (app *App) dummyBNode(op *Op) *backnode {
 	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
 	return &backnode{
 		id:             op.id,
@@ -248,7 +260,7 @@ func dummyBNode(op *Op, app *App) *backnode {
 	}
 }
 
-func execRem(op *Op, app *App) error {
+func (app *App) rem(op *Op) error {
 	rem := op.content.(*RemOp)
 	canRem, reason := app.canRemUser(op)
 	if !canRem {
@@ -258,12 +270,27 @@ func execRem(op *Op, app *App) error {
 	removed := app.users[rem.removed]
 	assert.True(areSetsDisjoint(issuer.Points, removed.Points), "points must be disjoint")
 	transferPoints(removed.Points, issuer.Points)
-	app.graphNodes[op.id] = remBNode(op, app)
+	app.graphNodes[op.id] = app.remBNode(op)
 	delete(app.users, rem.removed)
 	return nil
 }
 
-func remBNode(op *Op, app *App) *backnode {
+func (app *App) canRemUser(op *Op) (bool, string) {
+	rem := op.content.(*RemOp)
+	if rem.issuer == rem.removed {
+		return false, "user cannot remove themselves"
+	}
+	issuer := app.users[rem.issuer]
+	removed := app.users[rem.removed]
+	if issuer == nil {
+		return false, "operation issuer is not a user"
+	} else if removed == nil {
+		return false, "removed user is not in the system"
+	}
+	return true, ""
+}
+
+func (app *App) remBNode(op *Op) *backnode {
 	prev := lo.Map(op.prevIds, func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
 	rem := op.content.(*RemOp)
 	ot := make([]*ownerTransfer, 0)
@@ -277,19 +304,6 @@ func remBNode(op *Op, app *App) *backnode {
 		deltaVals:      cointoss.ShareRandomSecret(uint(app.threshold), uint(app.numPoints)),
 		ownerTransfers: ot,
 		prev:           prev,
-	}
-}
-
-func (app *App) initialBacknode(id, owner uuid.UUID, points int) *backnode {
-	shares := cointoss.ShareRandomSecret(uint(app.threshold), uint(points))
-	ot := lo.Map(shares, func(_ secretsharing.Share, i int) *ownerTransfer {
-		return &ownerTransfer{shareIdx: uint(i), owner: owner}
-	})
-	return &backnode{
-		id:             id,
-		deltaVals:      shares,
-		ownerTransfers: ot,
-		prev:           []*backnode{},
 	}
 }
 
@@ -333,22 +347,6 @@ func areSetsDisjoint(a, b *llrb.LLRB) bool {
 		return true
 	})
 	return disjoint
-}
-
-func (app *App) canRemUser(op *Op) (bool, string) {
-
-	rem := op.content.(*RemOp)
-	if rem.issuer == rem.removed {
-		return false, "user cannot remove themselves"
-	}
-	issuer := app.users[rem.issuer]
-	removed := app.users[rem.removed]
-	if issuer == nil {
-		return false, "operation issuer is not a user"
-	} else if removed == nil {
-		return false, "removed user is not in the system"
-	}
-	return true, ""
 }
 
 func newUser(id uuid.UUID, points []uint) *User {
