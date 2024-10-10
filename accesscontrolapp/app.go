@@ -230,8 +230,14 @@ func (app *App) concurrentRem(op1, op2 *Op, seed int64) error {
 	canRem, reason := app.canRemUser(op1)
 	if !canRem {
 		return fmt.Errorf(reason)
+	} else if !app.hasPrevious(op2) {
+		if err := app.rem(op1); err != nil {
+			return err
+		}
+		app.graphNodes[op2.id] = app.dummyBNode(op2)
 	}
-	coin, err := computeCoinToss(seed, app.secret)
+	allPrev := lo.Map(append(op1.prevIds, op2.prevIds...), func(id uuid.UUID, _ int) *backnode { return app.graphNodes[id] })
+	coin, err := computeCoinToss(seed, allPrev)
 	if err != nil {
 		return fmt.Errorf("unable to compute coin toss: %v", err)
 	}
@@ -317,17 +323,26 @@ func (app *App) computeThreshold(op *Op) float64 {
 	return threshold
 }
 
-func computeCoinToss(seed int64, secret secretsharing.Share) (float64, error) {
-	seedBytes := make([]byte, unsafe.Sizeof(seed))
-	binary.LittleEndian.PutUint64(seedBytes, uint64(seed))
-	hash := sha256.Sum256(seedBytes)
-	base := group.Ristretto255.HashToElement(hash[:], []byte("concurrent_rem_base"))
-	point := cointoss.ShareToPoint(secret, base)
-	coin, err := cointoss.HashPointToDouble(point.Point)
+func computeCoinToss(seed int64, prev []*backnode) (float64, error) {
+	shares := getCurrentShares(prev)
+	base := getECBase(seed)
+	pointShares := lo.Map(shares, func(s secretsharing.Share, _ int) cointoss.PointShare {
+		return cointoss.ShareToPoint(s, base)
+	})
+	secret := cointoss.RecoverSecretFromPoints(pointShares)
+	coin, err := cointoss.HashPointToDouble(secret)
 	if err != nil {
 		return 0, fmt.Errorf("unable to hash secret point to number: %v", err)
 	}
 	return coin, nil
+}
+
+func getECBase(seed int64) group.Element {
+	seedBytes := make([]byte, unsafe.Sizeof(seed))
+	binary.LittleEndian.PutUint64(seedBytes, uint64(seed))
+	hash := sha256.Sum256(seedBytes)
+	base := group.Ristretto255.HashToElement(hash[:], []byte("concurrent_rem_base"))
+	return base
 }
 
 func transferPoints(from, to *llrb.LLRB) {

@@ -101,6 +101,12 @@ func addNode(id uuid.UUID, deltaVals []secretsharing.Share, ownerTransfers []*ow
 	}
 }
 
+func getCurrentShares(nodes []*backnode) []secretsharing.Share {
+	fnode := makeSubgraph(nodes)
+	points := fnode.computeShareState()
+	return lo.Map(points, func(p *point, _ int) secretsharing.Share { return p.val })
+}
+
 // Assumes no cycles in the graph and no path existing between the nodes in the argument
 func makeSubgraph(nodes []*backnode) *forwardnode {
 	gstate := &graphState{make([]*point, 0)}
