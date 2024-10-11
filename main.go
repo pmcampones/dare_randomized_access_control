@@ -26,7 +26,7 @@ func main() {
 		crdt:          accesscontrolapp.NewCRDT(),
 		threshold:     2,
 		numPoints:     1000,
-		sleepInterval: 1 * time.Second,
+		sleepInterval: 3 * time.Second,
 	}
 	err := executor.runProgram()
 	if err != nil {
@@ -36,7 +36,7 @@ func main() {
 
 func (pe *programExecutor) runProgram() error {
 	slog.SetLogLoggerLevel(slog.LevelError)
-	r := rand.New(rand.NewSource(int64(3)))
+	r := rand.New(rand.NewSource(int64(13)))
 	alice, _ := uuid.NewRandomFromReader(r)
 	bob, _ := uuid.NewRandomFromReader(r)
 	claire, _ := uuid.NewRandomFromReader(r)
@@ -50,7 +50,7 @@ func (pe *programExecutor) runProgram() error {
 	_ = pe.runInstruction()
 	bobPost1 := hashgraph.NewNode(pe.crdt.Post(bob, "Bob: Aye aye captain!"), []*hashgraph.OpNode{alicePost1})
 	_ = pe.runInstruction()
-	addClaire := hashgraph.NewNode(pe.crdt.Add(alice, claire, "Claire", pointRange(20, 520)), []*hashgraph.OpNode{alicePost1})
+	addClaire := hashgraph.NewNode(pe.crdt.Add(alice, claire, "Claire", pointRange(20, 500)), []*hashgraph.OpNode{alicePost1})
 	_ = pe.runInstruction()
 	addDillan := hashgraph.NewNode(pe.crdt.Add(bob, dillan, "Dillan", pointRange(0, 5)), []*hashgraph.OpNode{bobPost1})
 	_ = pe.runInstruction()
@@ -72,7 +72,7 @@ func (pe *programExecutor) runProgram() error {
 	_ = pe.runInstruction()
 	dillanPost2 := hashgraph.NewNode(pe.crdt.Post(dillan, "Dillan: Guys I think my net is kinda weird!"), []*hashgraph.OpNode{dillanPost1})
 	_ = pe.runInstruction()
-	dillanPost3 := hashgraph.NewNode(pe.crdt.Post(dillan, "Dillan: Can you see my messages"), []*hashgraph.OpNode{dillanPost2})
+	dillanPost3 := hashgraph.NewNode(pe.crdt.Post(dillan, "Dillan: Can you see my messages???"), []*hashgraph.OpNode{dillanPost2})
 	_ = pe.runInstruction()
 	dillanPost4 := hashgraph.NewNode(pe.crdt.Post(dillan, "Dillan: Hellooo!! I'm all alone in the void 😭"), []*hashgraph.OpNode{dillanPost3})
 	_ = pe.runInstruction()
@@ -134,8 +134,6 @@ func (pe *programExecutor) runProgram() error {
 }
 
 func (pe *programExecutor) runInstruction() error {
-	screen.Clear()
-	screen.MoveTopLeft()
 	seed := int(time.Now().UnixNano())
 	hashgraph.RunHashgraph(seed, pe.init)
 	app, err := accesscontrolapp.ExecuteCRDT(&pe.crdt, pe.numPoints, pe.threshold)
@@ -143,6 +141,8 @@ func (pe *programExecutor) runInstruction() error {
 		return fmt.Errorf("error executing CRDT: %v", err)
 	}
 	msgs := lo.Map(app.Msgs, func(m accesscontrolapp.Msg, _ int) string { return m.Content })
+	screen.Clear()
+	screen.MoveTopLeft()
 	fmt.Println(strings.Join(msgs, "\n"))
 	pe.crdt.Clear()
 	time.Sleep(pe.sleepInterval)
