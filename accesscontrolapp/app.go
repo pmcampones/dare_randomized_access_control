@@ -17,8 +17,9 @@ import (
 	"unsafe"
 )
 
-// LOG_MEMBERSHIP_CHANGES Tests fail if this is true
-const LOG_MEMBERSHIP_CHANGES = true
+// LogMembershipChanges Tests fail if this is true
+// Changed in said tests to false
+var LogMembershipChanges = true
 
 type Msg struct {
 	Issuer  uuid.UUID
@@ -130,7 +131,7 @@ func (app *App) init(op *Op) error {
 	bnode := app.initialBacknode(op.id, init.initial, app.numPoints)
 	app.graphNodes[bnode.id] = bnode
 	app.users[init.initial] = user
-	if LOG_MEMBERSHIP_CHANGES {
+	if LogMembershipChanges {
 		app.Msgs = append(app.Msgs, Msg{Issuer: init.initial, Content: fmt.Sprintf("%s created group with %d points", user.prettyName, app.numPoints)})
 	}
 	return nil
@@ -163,7 +164,7 @@ func (app *App) add(op *Op) error {
 	app.users[add.added] = added
 	app.graphNodes[op.id] = app.addBnode(op, add)
 	slog.Debug("Added user", "issuer", add.issuer, "added", add.added, "points", len(add.points))
-	if LOG_MEMBERSHIP_CHANGES {
+	if LogMembershipChanges {
 		app.Msgs = append(app.Msgs, Msg{Issuer: add.issuer, Content: fmt.Sprintf("%s added %s with %d points", issuer.prettyName, added.prettyName, len(add.points))})
 	}
 	return nil
@@ -303,7 +304,7 @@ func (app *App) rem(op *Op) error {
 	app.graphNodes[op.id] = app.remBNode(op)
 	delete(app.users, rem.removed)
 	slog.Debug("Removed user", "issuer", rem.issuer, "removed", rem.removed)
-	if LOG_MEMBERSHIP_CHANGES {
+	if LogMembershipChanges {
 		app.Msgs = append(app.Msgs, Msg{Issuer: rem.issuer, Content: fmt.Sprintf("%s removed %s", issuer.prettyName, removed.prettyName)})
 	}
 	return nil

@@ -12,6 +12,7 @@ import (
 )
 
 func TestShouldStartEmpty(t *testing.T) {
+	LogMembershipChanges = false
 	crdt := NewCRDT()
 	app, err := ExecuteCRDT(&crdt, 10, 2)
 	assert.NoError(t, err)
@@ -20,6 +21,7 @@ func TestShouldStartEmpty(t *testing.T) {
 }
 
 func TestShouldHaveInitialNode(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -33,6 +35,7 @@ func TestShouldHaveInitialNode(t *testing.T) {
 }
 
 func TestShouldRecordMessage(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	msg := "A"
 	crdt := NewCRDT()
@@ -49,6 +52,7 @@ func TestShouldRecordMessage(t *testing.T) {
 }
 
 func TestShouldAddPeer(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -67,6 +71,7 @@ func TestShouldAddPeer(t *testing.T) {
 }
 
 func TestShouldGivePointsDuringAdd(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := 100
@@ -85,6 +90,7 @@ func TestShouldGivePointsDuringAdd(t *testing.T) {
 }
 
 func TestShouldRemovePeer(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -103,6 +109,7 @@ func TestShouldRemovePeer(t *testing.T) {
 }
 
 func TestShouldTakePointsDuringRem(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := 100
@@ -121,6 +128,7 @@ func TestShouldTakePointsDuringRem(t *testing.T) {
 }
 
 func TestShouldFailToPostMessageIssuerNotExists(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -136,6 +144,7 @@ func TestShouldFailToPostMessageIssuerNotExists(t *testing.T) {
 }
 
 func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := 100
@@ -154,6 +163,7 @@ func TestShouldFailToAddPeerIssuerNotExists(t *testing.T) {
 }
 
 func TestShouldFailToAddPeerAlreadyExistsSequential(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := 100
@@ -171,6 +181,7 @@ func TestShouldFailToAddPeerAlreadyExistsSequential(t *testing.T) {
 }
 
 func TestShouldFailToAddPeerAlreadyExistsConcurrent(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := 100
@@ -188,6 +199,7 @@ func TestShouldFailToAddPeerAlreadyExistsConcurrent(t *testing.T) {
 }
 
 func TestShouldFailToAddPeerLackOfPoints(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := makePtRange(0, 100)
@@ -202,6 +214,7 @@ func TestShouldFailToAddPeerLackOfPoints(t *testing.T) {
 }
 
 func TestShouldFailToAddPeerCannotAddSelf(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := 100
@@ -216,6 +229,7 @@ func TestShouldFailToAddPeerCannotAddSelf(t *testing.T) {
 }
 
 func TestShouldFailToAddPeerMustGivePoints(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	points := 100
@@ -232,6 +246,7 @@ func TestShouldFailToAddPeerMustGivePoints(t *testing.T) {
 }
 
 func TestShouldFailRemovePeerIssuerNotExists(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -247,6 +262,7 @@ func TestShouldFailRemovePeerIssuerNotExists(t *testing.T) {
 }
 
 func TestShouldFailRemovePeerUserNotExists(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -262,6 +278,7 @@ func TestShouldFailRemovePeerUserNotExists(t *testing.T) {
 }
 
 func TestShouldAddUsersConcurrently(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -280,6 +297,7 @@ func TestShouldAddUsersConcurrently(t *testing.T) {
 }
 
 func TestShouldPostConcurrently(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -298,6 +316,7 @@ func TestShouldPostConcurrently(t *testing.T) {
 }
 
 func TestShouldRemoveNonConflictingConcurrently(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -323,6 +342,7 @@ func TestShouldRemoveNonConflictingConcurrently(t *testing.T) {
 }
 
 func TestShouldRemoveConflictingConcurrently(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -341,6 +361,7 @@ func TestShouldRemoveConflictingConcurrently(t *testing.T) {
 }
 
 func TestShouldRemoveLowerDepthFirst(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -362,6 +383,7 @@ func TestShouldRemoveLowerDepthFirst(t *testing.T) {
 }
 
 func TestShouldHandleThreeWayConcurrentRemovals(t *testing.T) {
+	LogMembershipChanges = false
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	//A removes B, B removes C, and C removes A. D observes the result
 	r := rand.New(rand.NewSource(int64(25)))
@@ -398,6 +420,7 @@ func TestShouldHandleThreeWayConcurrentRemovals(t *testing.T) {
 }
 
 func TestShouldBeAbleToReferenceFailedPost(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -417,6 +440,7 @@ func TestShouldBeAbleToReferenceFailedPost(t *testing.T) {
 }
 
 func TestShouldBeAbleToReferenceFailedAdd(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -436,6 +460,7 @@ func TestShouldBeAbleToReferenceFailedAdd(t *testing.T) {
 }
 
 func TestShouldBeAbleToReferenceFailedRem(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
@@ -455,6 +480,7 @@ func TestShouldBeAbleToReferenceFailedRem(t *testing.T) {
 }
 
 func TestShouldBeAbleToReferenceFailedConcurrentRem(t *testing.T) {
+	LogMembershipChanges = false
 	r := rand.New(rand.NewSource(int64(0)))
 	crdt := NewCRDT()
 	firstId, err := uuid.NewRandomFromReader(r)
